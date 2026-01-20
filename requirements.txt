@@ -2,4 +2,3 @@ streamlit
 groq
 requests
 Pillow
-streamlit-autorefresh
