@@ -50,8 +50,27 @@ def generate_with_ludy(prompt, status_placeholder, progress_bar):
         # Encode the prompt for URL
         encoded_prompt = urllib.parse.quote(prompt)
         
-        # Pollinations.ai endpoint with Flux model for photorealistic results
-        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&model=flux&nologo=true"
+        # Using multiple free APIs as fallback options
+        apis = [
+            f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&model=flux&nologo=true&seed={int(time.time())}",
+            f"https://pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&nologo=true&seed={int(time.time())}",
+            f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&enhance=true&seed={int(time.time())}"
+        ]
+        
+        # Try each API until one works
+        last_error = None
+        for url in apis:
+            try:
+                response = requests.get(url, timeout=60)
+                if response.status_code == 200:
+                    return response.content
+            except Exception as e:
+                last_error = e
+                continue
+        
+        # If all APIs failed, raise the last error
+        if last_error:
+            raise last_error
         
         # Simulate queue position
         import random
@@ -75,14 +94,8 @@ def generate_with_ludy(prompt, status_placeholder, progress_bar):
             progress_bar.progress(progress)
             time.sleep(0.3)
         
-        # Fetch the image with longer timeout
-        response = requests.get(url, timeout=60)
-        response.raise_for_status()
-        
         progress_bar.progress(100)
         status_placeholder.write("✅ Generation complete!")
-        
-        return response.content
     except requests.exceptions.Timeout:
         raise Exception("Generation took too long. The servers might be busy. Please try again!")
     except requests.exceptions.RequestException as e:
