@@ -50,27 +50,55 @@ def generate_with_ludy(prompt, status_placeholder, progress_bar):
         # Encode the prompt for URL
         encoded_prompt = urllib.parse.quote(prompt)
         
-        # Using multiple free APIs as fallback options
+        # Try multiple free APIs in order of reliability
         apis = [
-            f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&model=flux&nologo=true&seed={int(time.time())}",
-            f"https://pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&nologo=true&seed={int(time.time())}",
-            f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&enhance=true&seed={int(time.time())}"
+            # API 1: Segmind (Stable Diffusion XL - truly free)
+            {
+                "url": "https://api.segmind.com/v1/sdxl1.0-txt2img",
+                "method": "POST",
+                "json": {
+                    "prompt": prompt,
+                    "negative_prompt": "blurry, low quality, distorted",
+                    "samples": 1,
+                    "scheduler": "UniPC",
+                    "num_inference_steps": 25,
+                    "guidance_scale": 8,
+                    "seed": int(time.time()),
+                    "img_width": 1024,
+                    "img_height": 1024,
+                    "base64": False
+                }
+            },
+            # API 2: Pollinations (Flux - backup)
+            {
+                "url": f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&seed={int(time.time())}",
+                "method": "GET"
+            },
+            # API 3: Another Pollinations endpoint
+            {
+                "url": f"https://pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&nologo=true",
+                "method": "GET"
+            }
         ]
         
-        # Try each API until one works
+        # Try each API
         last_error = None
-        for url in apis:
+        for api in apis:
             try:
-                response = requests.get(url, timeout=60)
+                if api["method"] == "POST":
+                    response = requests.post(api["url"], json=api["json"], timeout=60)
+                else:
+                    response = requests.get(api["url"], timeout=60)
+                
                 if response.status_code == 200:
                     return response.content
             except Exception as e:
                 last_error = e
                 continue
         
-        # If all APIs failed, raise the last error
+        # If all failed
         if last_error:
-            raise last_error
+            raise Exception(f"All image APIs failed. Last error: {str(last_error)}")
         
         # Simulate queue position
         import random
