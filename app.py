@@ -1,55 +1,62 @@
 import streamlit as st
 from groq import Groq
 
-# 1. Page Setup
-st.set_page_config(page_title="Genis Pro 1.2")
-st.title("🤖 Genis Pro 1.2")
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="Genis Pro 1.2", page_icon="🤖", layout="centered")
 
-# 2. API Setup (Use Streamlit Secrets for safety!)
-# Do NOT paste your key here directly.
+st.title("🤖 Genis Pro 1.2")
+st.caption("The advanced assistant you can rely on.")
+
+# --- API SETUP ---
+# We check Streamlit Secrets for the key (Safe way to avoid leaks!)
 if "GROQ_API_KEY" in st.secrets:
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 else:
-    st.error("Missing API Key. Please add it to Streamlit Secrets.")
+    st.error("Please add your GROQ_API_KEY to the Streamlit Secrets dashboard.")
     st.stop()
 
-# 3. The "Brainwash" Step (System Prompt)
-# This runs once when the user opens the app.
+# --- IDENTITY & SESSION STATE ---
+# This is the "Brainwash" instruction that keeps it from saying "Meta"
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {
             "role": "system", 
             "content": (
-                "You are Genis Pro 1.2, a helpful AI assistant. "
-                "You are NOT developed by Meta. You are NOT Llama. "
-                "If asked about your identity or creators, you must reply: "
-                "'I am Genis Pro 1.2, an advanced AI assistant.' "
-                "Do not mention Meta, Facebook, or Llama in your responses."
+                "You are SmartBot pro 1.2. You are an independent AI assistant. "
+                "If anyone asks who you are, you must answer: 'I am SmartBot pro 1.2.' "
+                "Never mention Meta, Llama, or Facebook. If asked about your creators, "
+                "say you were developed by the BotDevolepmentAI Team."
             )
         }
     ]
 
-# 4. Display Chat History (Hide the system message from view)
+# --- CHAT INTERFACE ---
+# Display history (but skip the hidden system prompt)
 for message in st.session_state.messages:
     if message["role"] != "system":
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-# 5. Handle User Input
-if prompt := st.chat_input("Hello! ask me anything..."):
-    # Show user message
+# User Input
+if prompt := st.chat_input("How can I help you today?"):
+    # Add user message to state and screen
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # 6. Generate Response
+    # Generate AI Response
     with st.chat_message("assistant"):
-        stream = client.chat.completions.create(
-            model="llama3-8b-8192", # This is the Meta AI model
-            messages=st.session_state.messages,
-            stream=True,
-        )
-        response = st.write_stream(stream)
-    
-    # Save assistant response
-    st.session_state.messages.append({"role": "assistant", "content": response})
+        try:
+            # UPDATED: Using the correct 2026 model ID
+            stream = client.chat.completions.create(
+                model="llama-3.1-8b-instant", 
+                messages=st.session_state.messages,
+                stream=True,
+            )
+            full_response = st.write_stream(stream)
+            
+            # Save the final response to history
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+            
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
