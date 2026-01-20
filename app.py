@@ -4,6 +4,7 @@ import requests
 import io
 from PIL import Image
 import urllib.parse
+import time
 
 # --- THEME & SPACE BACKGROUND ---
 st.set_page_config(page_title="Genis Pro 1.2", page_icon="🚀")
@@ -42,9 +43,9 @@ if "messages" not in st.session_state:
         "content": "You are Genis Pro 1.2, made by BotDevelopmentAI. You use 'SmartBot Ludy' for images. Never mention Meta or Llama."
     }]
 
-# --- SMARTBOT LUDY (Free Image Generation) ---
-def generate_with_ludy(prompt):
-    """Generate image using Pollinations.ai - completely free, no API key needed"""
+# --- SMARTBOT LUDY (Free Image Generation with Progress) ---
+def generate_with_ludy(prompt, status_placeholder, progress_bar):
+    """Generate image using Pollinations.ai with visual progress feedback"""
     try:
         # Encode the prompt for URL
         encoded_prompt = urllib.parse.quote(prompt)
@@ -52,13 +53,42 @@ def generate_with_ludy(prompt):
         # Pollinations.ai endpoint with Flux model for photorealistic results
         url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&model=flux&nologo=true"
         
-        # Fetch the image
-        response = requests.get(url, timeout=30)
+        # Simulate queue position
+        import random
+        queue_pos = random.randint(1, 3)
+        status_placeholder.write(f"⏳ Queue Position: #{queue_pos}")
+        progress_bar.progress(10)
+        time.sleep(0.5)
+        
+        # Show generation stages
+        stages = [
+            (20, "🎨 Initializing neural pathways..."),
+            (35, "🖼️ Processing prompt tokens..."),
+            (50, "✨ Generating latent space..."),
+            (65, "🌟 Rendering pixels..."),
+            (80, "🔮 Applying artistic refinements..."),
+            (95, "📸 Finalizing image...")
+        ]
+        
+        for progress, message in stages:
+            status_placeholder.write(message)
+            progress_bar.progress(progress)
+            time.sleep(0.3)
+        
+        # Fetch the image with longer timeout
+        response = requests.get(url, timeout=60)
         response.raise_for_status()
         
+        progress_bar.progress(100)
+        status_placeholder.write("✅ Generation complete!")
+        
         return response.content
+    except requests.exceptions.Timeout:
+        raise Exception("Generation took too long. The servers might be busy. Please try again!")
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"Network error: {str(e)}")
     except Exception as e:
-        raise Exception(f"Ludy encountered an error: {str(e)}")
+        raise Exception(f"Unexpected error: {str(e)}")
 
 # --- MAIN CHAT LOGIC ---
 for msg in st.session_state.messages:
@@ -76,9 +106,19 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
     if any(word in prompt.lower() for word in image_keywords):
         with st.chat_message("assistant"):
             st.write("🌌 **SmartBot Ludy** is visualizing your request...")
+            
+            # Create progress indicators
+            status_placeholder = st.empty()
+            progress_bar = st.progress(0)
+            
             try:
-                img_bytes = generate_with_ludy(prompt)
+                img_bytes = generate_with_ludy(prompt, status_placeholder, progress_bar)
                 img = Image.open(io.BytesIO(img_bytes))
+                
+                # Clear progress indicators
+                status_placeholder.empty()
+                progress_bar.empty()
+                
                 st.image(img, caption="Created by SmartBot Ludy")
                 
                 # Add a download button for the user
@@ -91,7 +131,10 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
                 
                 st.session_state.messages.append({"role": "assistant", "content": "I have generated that image for you using SmartBot Ludy."})
             except Exception as e:
-                st.error(f"Ludy says: {str(e)}")
+                status_placeholder.empty()
+                progress_bar.empty()
+                st.error(f"❌ Ludy says: {str(e)}")
+                st.info("💡 Tip: Try again or simplify your prompt!")
     
     # 2. Text Request Logic (No Spam Version)
     else:
