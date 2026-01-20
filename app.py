@@ -3,8 +3,6 @@ from groq import Groq
 import requests
 import io
 from PIL import Image
-import urllib.parse
-import time
 
 # --- THEME & SPACE BACKGROUND ---
 st.set_page_config(page_title="Genis Pro 1.2", page_icon="🚀")
@@ -25,16 +23,17 @@ st.markdown("""
 st.markdown("<h1 class='glow'>🚀 Genis Pro 1.2</h1>", unsafe_allow_html=True)
 st.caption("Developed by BotDevelopmentAI")
 
-# --- API CLIENT (Only Groq needed now!) ---
-def get_client():
+# --- API CLIENTS ---
+def get_clients():
     try:
         g_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-        return g_client
+        hf_token = st.secrets["HF_TOKEN"]
+        return g_client, hf_token
     except Exception:
-        st.error("Check your Streamlit Secrets for GROQ_API_KEY!")
+        st.error("Check your Streamlit Secrets for GROQ_API_KEY and HF_TOKEN!")
         st.stop()
 
-client = get_client()
+client, HF_TOKEN = get_clients()
 
 # --- BRAINWASHING & IDENTITY ---
 if "messages" not in st.session_state:
@@ -43,93 +42,20 @@ if "messages" not in st.session_state:
         "content": "You are Genis Pro 1.2, made by BotDevelopmentAI. You use 'SmartBot Ludy' for images. Never mention Meta or Llama."
     }]
 
-# --- SMARTBOT LUDY (Free Image Generation with Progress) ---
-def generate_with_ludy(prompt, status_placeholder, progress_bar):
-    """Generate image using Pollinations.ai with visual progress feedback"""
-    try:
-        # Encode the prompt for URL
-        encoded_prompt = urllib.parse.quote(prompt)
-        
-        # Try multiple free APIs in order of reliability
-        apis = [
-            # API 1: Segmind (Stable Diffusion XL - truly free)
-            {
-                "url": "https://api.segmind.com/v1/sdxl1.0-txt2img",
-                "method": "POST",
-                "json": {
-                    "prompt": prompt,
-                    "negative_prompt": "blurry, low quality, distorted",
-                    "samples": 1,
-                    "scheduler": "UniPC",
-                    "num_inference_steps": 25,
-                    "guidance_scale": 8,
-                    "seed": int(time.time()),
-                    "img_width": 1024,
-                    "img_height": 1024,
-                    "base64": False
-                }
-            },
-            # API 2: Pollinations (Flux - backup)
-            {
-                "url": f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&seed={int(time.time())}",
-                "method": "GET"
-            },
-            # API 3: Another Pollinations endpoint
-            {
-                "url": f"https://pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&nologo=true",
-                "method": "GET"
-            }
-        ]
-        
-        # Try each API
-        last_error = None
-        for api in apis:
-            try:
-                if api["method"] == "POST":
-                    response = requests.post(api["url"], json=api["json"], timeout=60)
-                else:
-                    response = requests.get(api["url"], timeout=60)
-                
-                if response.status_code == 200:
-                    return response.content
-            except Exception as e:
-                last_error = e
-                continue
-        
-        # If all failed
-        if last_error:
-            raise Exception(f"All image APIs failed. Last error: {str(last_error)}")
-        
-        # Simulate queue position
-        import random
-        queue_pos = random.randint(1, 3)
-        status_placeholder.write(f"⏳ Queue Position: #{queue_pos}")
-        progress_bar.progress(10)
-        time.sleep(0.5)
-        
-        # Show generation stages
-        stages = [
-            (20, "🎨 Initializing neural pathways..."),
-            (35, "🖼️ Processing prompt tokens..."),
-            (50, "✨ Generating latent space..."),
-            (65, "🌟 Rendering pixels..."),
-            (80, "🔮 Applying artistic refinements..."),
-            (95, "📸 Finalizing image...")
-        ]
-        
-        for progress, message in stages:
-            status_placeholder.write(message)
-            progress_bar.progress(progress)
-            time.sleep(0.3)
-        
-        progress_bar.progress(100)
-        status_placeholder.write("✅ Generation complete!")
-    except requests.exceptions.Timeout:
-        raise Exception("Generation took too long. The servers might be busy. Please try again!")
-    except requests.exceptions.RequestException as e:
-        raise Exception(f"Network error: {str(e)}")
-    except Exception as e:
-        raise Exception(f"Unexpected error: {str(e)}")
+# --- SMARTBOT LUDY (Fixed API Endpoint) ---
+def generate_with_ludy(prompt):
+    # UPDATED: Using the new Hugging Face Router URL
+    API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    
+    response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
+    
+    if response.status_code == 200:
+        return response.content
+    else:
+        # If it fails, try to give a helpful reason
+        error_msg = response.json().get("error", "Unknown error") if response.content else "No response"
+        raise Exception(f"Ludy Error {response.status_code}: {error_msg}")
 
 # --- MAIN CHAT LOGIC ---
 for msg in st.session_state.messages:
@@ -143,23 +69,13 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
         st.markdown(prompt)
 
     # 1. Image Request Logic
-    image_keywords = ["draw", "image", "generate", "picture", "photo", "paint", "create"]
+    image_keywords = ["draw", "image", "generate", "picture", "photo", "paint"]
     if any(word in prompt.lower() for word in image_keywords):
         with st.chat_message("assistant"):
             st.write("🌌 **SmartBot Ludy** is visualizing your request...")
-            
-            # Create progress indicators
-            status_placeholder = st.empty()
-            progress_bar = st.progress(0)
-            
             try:
-                img_bytes = generate_with_ludy(prompt, status_placeholder, progress_bar)
+                img_bytes = generate_with_ludy(prompt)
                 img = Image.open(io.BytesIO(img_bytes))
-                
-                # Clear progress indicators
-                status_placeholder.empty()
-                progress_bar.empty()
-                
                 st.image(img, caption="Created by SmartBot Ludy")
                 
                 # Add a download button for the user
@@ -172,10 +88,7 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
                 
                 st.session_state.messages.append({"role": "assistant", "content": "I have generated that image for you using SmartBot Ludy."})
             except Exception as e:
-                status_placeholder.empty()
-                progress_bar.empty()
-                st.error(f"❌ Ludy says: {str(e)}")
-                st.info("💡 Tip: Try again or simplify your prompt!")
+                st.error(f"Ludy says: {str(e)}")
     
     # 2. Text Request Logic (No Spam Version)
     else:
@@ -208,3 +121,4 @@ with st.sidebar:
     if st.button("Clear Memory"):
         st.session_state.messages = st.session_state.messages[:1]
         st.rerun()
+
