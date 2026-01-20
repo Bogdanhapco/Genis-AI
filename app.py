@@ -14,9 +14,9 @@ st.markdown("""
         color: #ffffff;
     }
     h1, h2, h3, p, span { color: #e0f7ff !important; }
-    .stChatInputContainer { background-color: transparent !important; }
-    /* Beautiful Space Text Glow */
     .glow { text-shadow: 0 0 10px #00d4ff, 0 0 20px #00d4ff; color: #00d4ff !important; font-weight: bold; }
+    /* Style the chat bubbles for a space feel */
+    div[data-testid="stChatMessage"] { background-color: rgba(0, 212, 255, 0.05); border: 1px solid rgba(0, 212, 255, 0.1); border-radius: 15px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -29,8 +29,8 @@ def get_clients():
         g_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         hf_token = st.secrets["HF_TOKEN"]
         return g_client, hf_token
-    except Exception as e:
-        st.error("Missing API Keys in Secrets!")
+    except Exception:
+        st.error("Check your Streamlit Secrets for GROQ_API_KEY and HF_TOKEN!")
         st.stop()
 
 client, HF_TOKEN = get_clients()
@@ -39,22 +39,23 @@ client, HF_TOKEN = get_clients()
 if "messages" not in st.session_state:
     st.session_state.messages = [{
         "role": "system", 
-        "content": "You are Genis Pro 1.2, made by BotDevelopmentAI. You use 'SmartBot Ludy' for images. Never say Meta/Llama."
+        "content": "You are Genis Pro 1.2, made by BotDevelopmentAI. You use 'SmartBot Ludy' for images. Never mention Meta or Llama."
     }]
 
-# --- SMARTBOT LUDY (Image Engine) ---
+# --- SMARTBOT LUDY (Fixed API Endpoint) ---
 def generate_with_ludy(prompt):
-    API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
+    # UPDATED: Using the new Hugging Face Router URL
+    API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     
     response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
     
     if response.status_code == 200:
         return response.content
-    elif response.status_code == 503:
-        raise Exception("SmartBot Ludy is 'warming up' its engines. Try again in 30 seconds!")
     else:
-        raise Exception(f"Ludy Error {response.status_code}: {response.text}")
+        # If it fails, try to give a helpful reason
+        error_msg = response.json().get("error", "Unknown error") if response.content else "No response"
+        raise Exception(f"Ludy Error {response.status_code}: {error_msg}")
 
 # --- MAIN CHAT LOGIC ---
 for msg in st.session_state.messages:
@@ -67,7 +68,7 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # 1. Check for Image Request
+    # 1. Image Request Logic
     image_keywords = ["draw", "image", "generate", "picture", "photo", "paint"]
     if any(word in prompt.lower() for word in image_keywords):
         with st.chat_message("assistant"):
@@ -76,11 +77,20 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
                 img_bytes = generate_with_ludy(prompt)
                 img = Image.open(io.BytesIO(img_bytes))
                 st.image(img, caption="Created by SmartBot Ludy")
-                st.session_state.messages.append({"role": "assistant", "content": "I have generated that image for you."})
+                
+                # Add a download button for the user
+                st.download_button(
+                    label="💾 Download Image",
+                    data=img_bytes,
+                    file_name="smartbot_ludy_art.png",
+                    mime="image/png"
+                )
+                
+                st.session_state.messages.append({"role": "assistant", "content": "I have generated that image for you using SmartBot Ludy."})
             except Exception as e:
                 st.error(f"Ludy says: {str(e)}")
     
-    # 2. Otherwise, Text Request
+    # 2. Text Request Logic (No Spam Version)
     else:
         with st.chat_message("assistant"):
             try:
@@ -94,7 +104,6 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
                 text_placeholder = st.empty()
                 
                 for chunk in completion:
-                    # SAFETY: Only grab the content string, ignore the metadata objects
                     if chunk.choices[0].delta.content:
                         full_text += chunk.choices[0].delta.content
                         text_placeholder.markdown(full_text + "▌")
@@ -107,7 +116,8 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
 
 # Sidebar
 with st.sidebar:
-    st.header("Genis Control")
+    st.markdown("### 🌌 Genis Hub")
+    st.info("Genis Pro 1.2 by BotDevelopmentAI")
     if st.button("Clear Memory"):
         st.session_state.messages = st.session_state.messages[:1]
         st.rerun()
