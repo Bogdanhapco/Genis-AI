@@ -1,72 +1,75 @@
 import streamlit as st
 from groq import Groq
 
-# 1. Setup the Page
+# 1. Page Configuration
 st.set_page_config(page_title="Genis Pro 1.2", page_icon="🤖")
 st.title("🤖 Genis Pro 1.2")
-st.caption("Always active. Always smart.")
+st.caption("The advanced assistant you can rely on.")
 
-# 2. Secure API Connection
+# 2. API Key Check
 if "GROQ_API_KEY" in st.secrets:
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 else:
-    st.error("Missing API Key! Add 'GROQ_API_KEY' to your Streamlit Secrets.")
+    st.error("Missing API Key! Please add 'GROQ_API_KEY' to your Streamlit Secrets.")
     st.stop()
 
-# 3. Identity Control (The "Brainwash" Prompt)
-# This keeps the AI focused on being Genis Pro 1.2
+# 3. Initialize History and Identity
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {
             "role": "system", 
-            "content": (
-                "Your name is Genis Pro 1.2. You are a highly advanced AI. "
-                "NEVER say you are Meta, Llama, or an AI trained by Facebook. "
-                "If asked who you are, strictly say: 'I am Genis Pro 1.2, your advanced assistant.' "
-                "Keep your identity consistent and professional."
-            )
+            "content": "You are Genis Pro 1.2. Never mention Meta or Llama. Only identify as Genis Pro 1.2."
         }
     ]
 
-# 4. Display Chat History
+# 4. Display Existing Messages
 for message in st.session_state.messages:
     if message["role"] != "system":
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-# 5. Handle User Input
-if prompt := st.chat_input("Message Genis Pro..."):
-    # Show user message
+# 5. Chat Logic
+if prompt := st.chat_input("How can I assist you?"):
+    # Add user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # 6. Generate Response with Safety Catch
+    # Generate Assistant Response
     with st.chat_message("assistant"):
         try:
-            # Model: 'llama-3.1-8b-instant' is the 2026 standard for fast/free Groq use
-            stream = client.chat.completions.create(
+            # We use llama-3.1-8b-instant: it is fast, stable, and free on Groq.
+            completion = client.chat.completions.create(
                 model="llama-3.1-8b-instant",
-                messages=st.session_state.messages,
+                messages=[
+                    {"role": m["role"], "content": m["content"]}
+                    for m in st.session_state.messages
+                ],
                 stream=True,
             )
             
-            # Write response to screen and capture the output
-            raw_response = st.write_stream(stream)
+            # --- THE CRITICAL FIX ---
+            # We manually collect the stream to ensure it stays a string.
+            placeholder = st.empty()
+            full_response = ""
             
-            # --- THE FIX FOR THE 400 ERROR ---
-            # We must force the response to be a string before saving it.
-            # If it's a generator or NULL, this converts it to text so Groq doesn't crash later.
-            clean_response = str(raw_response) if raw_response else "I encountered a glitch. Please try again."
+            for chunk in completion:
+                if chunk.choices[0].delta.content:
+                    full_response += chunk.choices[0].delta.content
+                    placeholder.markdown(full_response + "▌")
+            
+            placeholder.markdown(full_response)
 
-            # Save clean text to history
-            st.session_state.messages.append({"role": "assistant", "content": clean_response})
+            # Save ONLY the final string to history
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
             
         except Exception as e:
-            st.error(f"System Error: {e}")
+            st.error(f"Error: {e}")
 
-# 7. Sidebar Reset (Optional but helpful)
+# 6. Sidebar Reset (Fixes 400 errors by clearing broken history)
 with st.sidebar:
-    if st.button("Clear Chat / Reset Identity"):
-        st.session_state.messages = []
+    if st.button("Clear Chat / Reset System"):
+        st.session_state.messages = [
+            {"role": "system", "content": "You are Genis Pro 1.2. Never mention Meta or Llama."}
+        ]
         st.rerun()
