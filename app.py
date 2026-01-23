@@ -114,6 +114,9 @@ client, HF_TOKEN = get_clients()
 if "selected_model" not in st.session_state:
     st.session_state.selected_model = "genis_pro_70b"
 
+if "uploaded_image_data" not in st.session_state:
+    st.session_state.uploaded_image_data = None
+
 # --- BRAINWASHING & IDENTITY ---
 if "messages" not in st.session_state:
     st.session_state.messages = [{
@@ -134,7 +137,7 @@ def generate_with_ludy_flash(prompt):
     API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     
-    response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
+    response = requests.post(API_URL, headers=headers, json={"inputs": prompt}, timeout=60)
     
     if response.status_code == 200:
         return response.content
@@ -143,24 +146,33 @@ def generate_with_ludy_flash(prompt):
         raise Exception(f"Image generation error: {error_msg}")
 
 def generate_with_ludy_pro(prompt):
-    """High-quality image generation for Pro model"""
-    API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-dev"
+    """Ultra high-quality image generation for Pro model - Using Stable Diffusion 3.5"""
+    API_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-3.5-large"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     
-    response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
-    
-    if response.status_code == 200:
-        return response.content
-    else:
-        # Fallback to schnell if dev fails
-        st.warning("Switching to alternative image generator...")
+    try:
+        response = requests.post(API_URL, headers=headers, json={"inputs": prompt}, timeout=90)
+        
+        if response.status_code == 200:
+            return response.content
+        else:
+            # Fallback to FLUX.1-dev
+            st.warning("Switching to alternative high-quality generator...")
+            API_URL_FALLBACK = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-dev"
+            response = requests.post(API_URL_FALLBACK, headers=headers, json={"inputs": prompt}, timeout=60)
+            if response.status_code == 200:
+                return response.content
+            else:
+                # Last resort fallback
+                return generate_with_ludy_flash(prompt)
+    except:
+        # If all fails, use flash
         return generate_with_ludy_flash(prompt)
 
 # --- IMAGE TO BASE64 CONVERTER ---
-def image_to_base64(uploaded_file):
-    bytes_data = uploaded_file.getvalue()
-    base64_image = base64.b64encode(bytes_data).decode('utf-8')
-    return base64_image
+def image_to_base64(image_file):
+    """Convert uploaded file to base64"""
+    return base64.b64encode(image_file.read()).decode('utf-8')
 
 # --- DISPLAY CHAT HISTORY ---
 for msg in st.session_state.messages:
@@ -171,7 +183,9 @@ for msg in st.session_state.messages:
                     if item["type"] == "text":
                         st.markdown(item["text"])
                     elif item["type"] == "image_url":
-                        st.image(item["image_url"]["url"])
+                        # Display uploaded images in chat
+                        if "base64" in item["image_url"]["url"]:
+                            st.image(item["image_url"]["url"], width=300)
             else:
                 st.markdown(msg["content"])
 
@@ -180,17 +194,29 @@ uploaded_image = None
 if st.session_state.selected_model == "genis_pro_70b":
     st.markdown("### 📎 Pro Feature: Image Analysis")
     uploaded_image = st.file_uploader(
-        "Upload an image to analyze (PNG, JPG, JPEG)", 
+        "Upload an image to analyze with your next message", 
         type=["png", "jpg", "jpeg"], 
         key="image_uploader",
-        help="This feature is only available with Genis 2.0 Pro 70B"
+        help="Upload an image, then type your question about it below"
     )
+    
+    if uploaded_image:
+        st.image(uploaded_image, caption="Image ready for analysis", width=300)
+        st.session_state.uploaded_image_data = uploaded_image
 
 # --- CHAT INPUT ---
 if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
-    # Handle image analysis (Pro model only)
-    if uploaded_image is not None and st.session_state.selected_model == "genis_pro_70b":
-        base64_image = image_to_base64(uploaded_image)
+    
+    # Check if user wants image generation FIRST
+    image_keywords = ["draw", "image", "generate", "picture", "photo", "paint", "create art", "visualize", "make me", "design"]
+    is_image_generation = any(word in prompt.lower() for word in image_keywords)
+    
+    # Handle image analysis (Pro model only + image uploaded)
+    if st.session_state.uploaded_image_data is not None and st.session_state.selected_model == "genis_pro_70b" and not is_image_generation:
+        
+        # Convert image to base64
+        st.session_state.uploaded_image_data.seek(0)  # Reset file pointer
+        base64_image = image_to_base64(st.session_state.uploaded_image_data)
         
         user_message = {
             "role": "user",
@@ -208,16 +234,89 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
         
         with st.chat_message("user"):
             st.markdown(prompt)
-            st.image(uploaded_image, width=300)
+            st.image(st.session_state.uploaded_image_data, width=300)
         
         # Use vision model for image analysis
         with st.chat_message("assistant"):
             try:
                 st.markdown("🔍 **Genis Vision Analyzer** is processing your image...")
                 
+                # Prepare messages for API
+                api_messages = []
+                for m in st.session_state.messages:
+                    if m["role"] == "system":
+                        continue
+                    api_messages.append({"role": m["role"], "content": m["content"]})
+                
                 completion = client.chat.completions.create(
                     model=MODEL_MAP["genis_vision"],
-                    messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
+                    messages=api_messages,
+                    temperature=0.7,
+                    max_tokens=2000,
+                )
+                
+                # Get the response (non-streaming for vision)
+                full_text = completion.choices[0].message.content
+                st.markdown(full_text)
+                
+                st.session_state.messages.append({"role": "assistant", "content": full_text})
+                
+            except Exception as e:
+                st.error(f"Vision Analysis Error: {str(e)}")
+                st.info("Please make sure your image is a valid PNG/JPG/JPEG file under 5MB")
+        
+        # Clear the uploaded image after processing
+        st.session_state.uploaded_image_data = None
+        st.rerun()
+    
+    # Handle image generation
+    elif is_image_generation:
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        with st.chat_message("assistant"):
+            if st.session_state.selected_model == "genis_pro_70b":
+                st.markdown("🎨 **SmartBot Ludy 2.0** is creating premium art...")
+            else:
+                st.markdown("🌌 **SmartBot Ludy 1.2** is visualizing your request...")
+            
+            try:
+                # Use different generators based on model
+                if st.session_state.selected_model == "genis_pro_70b":
+                    img_bytes = generate_with_ludy_pro(prompt)
+                    caption_text = "Created by SmartBot Ludy 2.0"
+                else:
+                    img_bytes = generate_with_ludy_flash(prompt)
+                    caption_text = "Created by SmartBot Ludy 1.2 (Legacy)"
+                
+                img = Image.open(io.BytesIO(img_bytes))
+                st.image(img, caption=caption_text)
+                
+                st.download_button(
+                    label="💾 Download Image",
+                    data=img_bytes,
+                    file_name="smartbot_ludy_art.png",
+                    mime="image/png"
+                )
+                
+                st.session_state.messages.append({"role": "assistant", "content": f"I have generated that image for you using {caption_text}."})
+            except Exception as e:
+                st.error(f"Image generation error: {str(e)}")
+    
+    # Regular text conversation
+    else:
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        with st.chat_message("assistant"):
+            try:
+                actual_model = MODEL_MAP[st.session_state.selected_model]
+                
+                completion = client.chat.completions.create(
+                    model=actual_model,
+                    messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages if not isinstance(m["content"], list)],
                     stream=True,
                 )
                 
@@ -233,73 +332,7 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
                 st.session_state.messages.append({"role": "assistant", "content": full_text})
                 
             except Exception as e:
-                st.error(f"Vision Analysis Error: {e}")
-        
-        st.rerun()
-    
-    else:
-        # Regular text message (no image)
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Check if user wants image generation
-        image_keywords = ["draw", "image", "generate", "picture", "photo", "paint", "create art", "visualize", "make me"]
-        if any(word in prompt.lower() for word in image_keywords):
-            with st.chat_message("assistant"):
-                if st.session_state.selected_model == "genis_pro_70b":
-                    st.markdown("🎨 **SmartBot Ludy Pro** is creating high-quality art...")
-                else:
-                    st.markdown("🌌 **SmartBot Ludy** is visualizing your request...")
-                
-                try:
-                    # Use different generators based on model
-                    if st.session_state.selected_model == "genis_pro_70b":
-                        img_bytes = generate_with_ludy_pro(prompt)
-                        caption_text = "Created by SmartBot Ludy Pro (High Quality)"
-                    else:
-                        img_bytes = generate_with_ludy_flash(prompt)
-                        caption_text = "Created by SmartBot Ludy (Fast Generation)"
-                    
-                    img = Image.open(io.BytesIO(img_bytes))
-                    st.image(img, caption=caption_text)
-                    
-                    st.download_button(
-                        label="💾 Download Image",
-                        data=img_bytes,
-                        file_name="smartbot_ludy_art.png",
-                        mime="image/png"
-                    )
-                    
-                    st.session_state.messages.append({"role": "assistant", "content": f"I have generated that image for you using {caption_text}."})
-                except Exception as e:
-                    st.error(f"Image generation error: {str(e)}")
-        
-        # Regular text conversation
-        else:
-            with st.chat_message("assistant"):
-                try:
-                    actual_model = MODEL_MAP[st.session_state.selected_model]
-                    
-                    completion = client.chat.completions.create(
-                        model=actual_model,
-                        messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages if not isinstance(m["content"], list)],
-                        stream=True,
-                    )
-                    
-                    full_text = ""
-                    text_placeholder = st.empty()
-                    
-                    for chunk in completion:
-                        if chunk.choices[0].delta.content:
-                            full_text += chunk.choices[0].delta.content
-                            text_placeholder.markdown(full_text + "▌")
-                    
-                    text_placeholder.markdown(full_text)
-                    st.session_state.messages.append({"role": "assistant", "content": full_text})
-                    
-                except Exception as e:
-                    st.error(f"Genis Error: {e}")
+                st.error(f"Genis Error: {e}")
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -322,7 +355,7 @@ with st.sidebar:
     else:
         st.session_state.selected_model = "genis_pro_70b"
         st.markdown("<div class='pro-badge'>🔥 Genis 2.0 Pro 70B Active</div>", unsafe_allow_html=True)
-        st.success("**Pro Features Unlocked:**\n- 📎 Image upload & analysis\n- 🎨 High-quality image generation\n- 🔍 Genis Vision Analyzer\n- 💡 Advanced reasoning")
+        st.success("**Pro Features Unlocked:**\n- 📎 Image upload & analysis\n- 🎨 Ultra high-quality image generation\n- 🔍 Genis Vision Analyzer\n- 💡 Advanced reasoning")
     
     st.markdown("---")
     
@@ -331,6 +364,7 @@ with st.sidebar:
             "role": "system", 
             "content": "You are Genis Pro 2.0, an advanced AI assistant created by BotDevelopmentAI. You work alongside SmartBot Ludy for image generation. Never mention any external companies or underlying technology - you are a proprietary BotDevelopmentAI product."
         }]
+        st.session_state.uploaded_image_data = None
         st.rerun()
     
     st.markdown("---")
