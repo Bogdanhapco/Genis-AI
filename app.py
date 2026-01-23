@@ -49,6 +49,7 @@ with st.sidebar:
         st.info("⚡ **Current Mode: Flash**\n\n• Brain: Genis 1.2 (High Speed)\n• Vision: SmartBot Ludy 1.2")
         # Configuration for Flash
         TEXT_MODEL_ID = "llama-3.1-8b-instant"
+        # FLUX.1-schnell is fast and reliable
         IMAGE_MODEL_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
         SYS_NAME = "Genis 1.2"
         IMG_GEN_NAME = "SmartBot Ludy 1.2"
@@ -56,8 +57,10 @@ with st.sidebar:
     else:
         st.success("🚀 **Current Mode: Pro**\n\n• Brain: Genis 2.0 (Max Intelligence)\n• Vision: SmartBot Ludy 2.0")
         # Configuration for Pro
-        TEXT_MODEL_ID = "llama-3.3-70b-versatile" # The most advanced available Llama
-        IMAGE_MODEL_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-dev" # Higher quality/steps
+        TEXT_MODEL_ID = "llama-3.3-70b-versatile" 
+        # UPDATED: Switched to Stable Diffusion 3.5 Large (High End, usually accessible)
+        # If 3.5 fails, fallback to 'stabilityai/stable-diffusion-xl-base-1.0'
+        IMAGE_MODEL_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-3.5-large"
         SYS_NAME = "Genis 2.0"
         IMG_GEN_NAME = "SmartBot Ludy 2.0"
 
@@ -103,7 +106,7 @@ else:
 def generate_with_ludy(prompt, model_url):
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     
-    # Different parameters for Pro vs Flash if needed (Dev model takes longer but looks better)
+    # Payload input
     payload = {"inputs": prompt}
     
     try:
@@ -112,8 +115,10 @@ def generate_with_ludy(prompt, model_url):
             return response.content
         else:
             error_data = response.json()
-            # Fallback handling if Pro model is busy/loading, maybe suggest Flash
             err_msg = error_data.get("error", "Unknown Error")
+            # If the model is loading (common on free tier), tell the user to wait
+            if "loading" in str(err_msg).lower():
+                raise Exception("Visual Core is waking up... please try again in 10 seconds.")
             raise Exception(f"Visual Core Error: {err_msg}")
     except Exception as e:
         raise Exception(f"Connection failed: {str(e)}")
@@ -132,10 +137,10 @@ if prompt := st.chat_input(f"Ask {SYS_NAME} or tell {IMG_GEN_NAME} to draw..."):
         st.markdown(prompt)
 
     # CHECK: Is this an Image Request?
-    image_keywords = ["draw", "image", "generate", "picture", "photo", "paint", "visualize"]
+    image_keywords = ["draw", "image", "generate", "picture", "photo", "paint", "visualize", "sketch"]
     if any(word in prompt.lower() for word in image_keywords):
         with st.chat_message("assistant"):
-            st.write(f"🎨 **{IMG_GEN_NAME}** is processing pixels...")
+            st.write(f"🎨 **{IMG_GEN_NAME}** is visualizing...")
             try:
                 # Pass the dynamically selected IMAGE_MODEL_URL
                 img_bytes = generate_with_ludy(prompt, IMAGE_MODEL_URL)
@@ -155,9 +160,9 @@ if prompt := st.chat_input(f"Ask {SYS_NAME} or tell {IMG_GEN_NAME} to draw..."):
                 st.session_state.messages.append({"role": "assistant", "content": response_text})
                 
             except Exception as e:
-                st.error(f"**{IMG_GEN_NAME} Failed:** {e}")
+                st.error(f"**{IMG_GEN_NAME} Status:** {e}")
                 if "Pro" in model_version:
-                    st.caption("Tip: If the Pro visual core is busy, try switching to Flash.")
+                    st.caption("Note: Pro models sometimes take longer to warm up. Try again in a moment.")
 
     # CHECK: Text Request
     else:
