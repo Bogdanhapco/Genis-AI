@@ -58,9 +58,8 @@ with st.sidebar:
         st.success("🚀 **Current Mode: Pro**\n\n• Brain: Genis 2.0 (Max Intelligence)\n• Vision: SmartBot Ludy 2.0")
         # Configuration for Pro
         TEXT_MODEL_ID = "llama-3.3-70b-versatile" 
-        # UPDATED: Switched to Stable Diffusion 3.5 Large (High End, usually accessible)
-        # If 3.5 fails, fallback to 'stabilityai/stable-diffusion-xl-base-1.0'
-        IMAGE_MODEL_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-3.5-large"
+        # UPDATED: Switched to Stable Diffusion XL (SDXL) - Highly reliable Pro model
+        IMAGE_MODEL_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0"
         SYS_NAME = "Genis 2.0"
         IMG_GEN_NAME = "SmartBot Ludy 2.0"
 
@@ -118,7 +117,7 @@ def generate_with_ludy(prompt, model_url):
             err_msg = error_data.get("error", "Unknown Error")
             # If the model is loading (common on free tier), tell the user to wait
             if "loading" in str(err_msg).lower():
-                raise Exception("Visual Core is waking up... please try again in 10 seconds.")
+                raise Exception("Visual Core is warming up... please wait 10 seconds and try again.")
             raise Exception(f"Visual Core Error: {err_msg}")
     except Exception as e:
         raise Exception(f"Connection failed: {str(e)}")
@@ -162,7 +161,7 @@ if prompt := st.chat_input(f"Ask {SYS_NAME} or tell {IMG_GEN_NAME} to draw..."):
             except Exception as e:
                 st.error(f"**{IMG_GEN_NAME} Status:** {e}")
                 if "Pro" in model_version:
-                    st.caption("Note: Pro models sometimes take longer to warm up. Try again in a moment.")
+                    st.caption("Note: If the Pro core is busy, try switching to Flash for instant results.")
 
     # CHECK: Text Request
     else:
