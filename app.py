@@ -16,7 +16,7 @@ st.markdown("""
     }
     h1, h2, h3, p, span, label, .stMarkdown { color: #e0f7ff !important; }
     .glow { text-shadow: 0 0 10px #00d4ff, 0 0 20px #00d4ff; color: #00d4ff !important; font-weight: bold; }
-    div[data-testid="stChatMessage"] { background-color: rgba(0, 212, 255, 0.05); border: 1px solid rgba(0, 212, 255, 0.1); border-radius: 15px; }
+    div[data-testid="stChatMessage"] { background-color: rgba(0, 212, 255, 0.05); border-radius: 15px; }
     section[data-testid="stSidebar"] { background-color: #0b0c10; border-right: 1px solid #1f2937; }
     </style>
     """, unsafe_allow_html=True)
@@ -29,16 +29,16 @@ with st.sidebar:
     st.markdown("---")
     
     if model_version == "Genis 1.2 (Flash)":
-        st.info("⚡ **Flash Mode**\n\n• Brain: Genis 1.2\n• Vision: Ludy 1.2")
+        st.info("⚡ **Flash Mode**\n• Brain: Genis 1.2\n• Vision: Ludy 1.2 (SDXL)")
         TEXT_MODEL_ID = "llama-3.1-8b-instant"
-        # Flash uses the high-speed Schnell variant via Router
-        IMAGE_MODEL_ID = "black-forest-labs/FLUX.1-schnell" 
+        # Flash: Stable Diffusion XL (Highly compatible)
+        IMAGE_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
         SYS_NAME, IMG_GEN_NAME = "Genis 1.2", "SmartBot Ludy 1.2"
     else:
-        st.success("🚀 **Pro Mode**\n\n• Brain: Genis 2.0 (70B)\n• Vision: Ludy 2.0")
+        st.success("🚀 **Pro Mode**\n• Brain: Genis 2.0\n• Vision: Ludy 2.0 (FLUX)")
         TEXT_MODEL_ID = "llama-3.3-70b-versatile" 
-        # Pro uses the higher-fidelity Pro/Dev variant via Router
-        IMAGE_MODEL_ID = "black-forest-labs/FLUX.1-pro" 
+        # Pro: FLUX.1-schnell (Best speed-to-quality ratio on router)
+        IMAGE_MODEL_ID = "black-forest-labs/FLUX.1-schnell"
         SYS_NAME, IMG_GEN_NAME = "Genis 2.0", "SmartBot Ludy 2.0"
 
     if st.button("🗑️ Clear Memory"):
@@ -51,48 +51,34 @@ def get_clients():
         g_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         hf_token = st.secrets["HF_TOKEN"]
         return g_client, hf_token
-    except Exception:
-        st.error("Missing API Keys! Check Streamlit Secrets.")
+    except:
+        st.error("Missing API Keys!")
         st.stop()
 
 client, HF_TOKEN = get_clients()
 
-# --- INITIALIZE SYSTEM PROMPT ---
-current_system_prompt = {
-    "role": "system", 
-    "content": f"You are {SYS_NAME} by BotDevelopmentAI. Use '{IMG_GEN_NAME}' for visuals. No mention of other companies."
-}
-
-if "messages" not in st.session_state or not st.session_state.messages:
-    st.session_state.messages = [current_system_prompt]
-
 # --- ROUTER IMAGE GENERATION ---
 def generate_with_router(prompt, model_id):
-    # Standard 2026 Router Endpoint
+    # This is the 2026 standardized router path for specific model inference
     url = f"https://router.huggingface.co/hf-inference/models/{model_id}"
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    headers = {"Authorization": f"Bearer {HF_TOKEN}", "Content-Type": "application/json"}
     
-    for attempt in range(2):
-        response = requests.post(url, headers=headers, json={"inputs": prompt})
-        
-        if response.status_code == 200:
-            return response.content
-        
-        # Handle the 503 "Loading" status from Router
-        if response.status_code == 503:
-            time.sleep(15)
-            continue
-            
+    # Payload for image generation
+    payload = {"inputs": prompt, "parameters": {"num_inference_steps": 4 if "flux" in model_id.lower() else 30}}
+    
+    response = requests.post(url, headers=headers, json=payload)
+    
+    if response.status_code == 200:
+        return response.content
+    else:
+        # Handle the common loading or not found errors
         try:
-            error_msg = response.json().get("error", f"Error {response.status_code}")
+            err = response.json().get("error", "Unknown Router Error")
         except:
-            error_msg = response.text
-            
-        raise Exception(error_msg)
-    
-    raise Exception("Model load-time exceeded on router. Please try again.")
+            err = f"Status Code {response.status_code}"
+        raise Exception(err)
 
-# --- INTERFACE ---
+# --- CHAT UI ---
 st.markdown(f"<h1 class='glow'>🚀 {SYS_NAME}</h1>", unsafe_allow_html=True)
 
 for msg in st.session_state.messages:
@@ -100,27 +86,22 @@ for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-if prompt := st.chat_input(f"Communicate with {SYS_NAME}..."):
+if prompt := st.chat_input(f"Message {SYS_NAME}..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    image_keywords = ["draw", "image", "picture", "generate", "photo"]
-    if any(word in prompt.lower() for word in image_keywords):
+    if any(word in prompt.lower() for word in ["draw", "image", "generate", "visualize"]):
         with st.chat_message("assistant"):
-            with st.spinner(f"🌌 {IMG_GEN_NAME} accessing Router..."):
+            with st.spinner(f"🎨 {IMG_GEN_NAME} is routing your request..."):
                 try:
                     img_bytes = generate_with_router(prompt, IMAGE_MODEL_ID)
                     st.image(Image.open(io.BytesIO(img_bytes)), caption=f"Visualized by {IMG_GEN_NAME}")
-                    
-                    # Added Download Button for Pro quality visuals
-                    st.download_button(label="💾 Download HD Visual", data=img_bytes, file_name="genis_art.png", mime="image/png")
-                    
-                    st.session_state.messages.append({"role": "assistant", "content": f"Generated image via {IMG_GEN_NAME}."})
+                    st.session_state.messages.append({"role": "assistant", "content": f"Image generated via {IMG_GEN_NAME}."})
                 except Exception as e:
                     st.error(f"Router Exception: {e}")
     else:
-        # Chat completion logic...
+        # Text Logic
         with st.chat_message("assistant"):
             try:
                 stream = client.chat.completions.create(
@@ -137,4 +118,4 @@ if prompt := st.chat_input(f"Communicate with {SYS_NAME}..."):
                 placeholder.markdown(full_text)
                 st.session_state.messages.append({"role": "assistant", "content": full_text})
             except Exception as e:
-                st.error(f"Genis Processing Error: {e}")
+                st.error(f"Processing Error: {e}")
