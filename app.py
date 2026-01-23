@@ -28,19 +28,17 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 2026 ROUTER CONFIGURATION
-    ROUTER_BASE_URL = "https://router.huggingface.co/hf-inference/v1/projects/predict"
-    
     if model_version == "Genis 1.2 (Flash)":
-        st.info("⚡ **Flash Mode**\n\n• Brain: Genis 1.2\n• Vision: Ludy 1.2 (Speed Optimized)")
+        st.info("⚡ **Flash Mode**\n\n• Brain: Genis 1.2\n• Vision: Ludy 1.2")
         TEXT_MODEL_ID = "llama-3.1-8b-instant"
-        IMAGE_MODEL_ID = "black-forest-labs/FLUX.1-schnell" # Fast & Reliable
+        # Flash uses the high-speed Schnell variant via Router
+        IMAGE_MODEL_ID = "black-forest-labs/FLUX.1-schnell" 
         SYS_NAME, IMG_GEN_NAME = "Genis 1.2", "SmartBot Ludy 1.2"
     else:
-        st.success("🚀 **Pro Mode**\n\n• Brain: Genis 2.0 (70B)\n• Vision: Ludy 2.0 (FLUX.2 Max)")
+        st.success("🚀 **Pro Mode**\n\n• Brain: Genis 2.0 (70B)\n• Vision: Ludy 2.0")
         TEXT_MODEL_ID = "llama-3.3-70b-versatile" 
-        # UPGRADED: Using FLUX.2 for true Pro results via the Router
-        IMAGE_MODEL_ID = "black-forest-labs/FLUX.1-dev" 
+        # Pro uses the higher-fidelity Pro/Dev variant via Router
+        IMAGE_MODEL_ID = "black-forest-labs/FLUX.1-pro" 
         SYS_NAME, IMG_GEN_NAME = "Genis 2.0", "SmartBot Ludy 2.0"
 
     if st.button("🗑️ Clear Memory"):
@@ -59,45 +57,42 @@ def get_clients():
 
 client, HF_TOKEN = get_clients()
 
-# --- SYSTEM PROMPT ---
+# --- INITIALIZE SYSTEM PROMPT ---
 current_system_prompt = {
     "role": "system", 
-    "content": f"You are {SYS_NAME} by BotDevelopmentAI. Use '{IMG_GEN_NAME}' for visuals."
+    "content": f"You are {SYS_NAME} by BotDevelopmentAI. Use '{IMG_GEN_NAME}' for visuals. No mention of other companies."
 }
 
 if "messages" not in st.session_state or not st.session_state.messages:
     st.session_state.messages = [current_system_prompt]
 
-# --- IMAGE GENERATION VIA ROUTER ---
+# --- ROUTER IMAGE GENERATION ---
 def generate_with_router(prompt, model_id):
-    # The Router requires a different path structure: router.huggingface.co/hf-inference/models/{model_id}
+    # Standard 2026 Router Endpoint
     url = f"https://router.huggingface.co/hf-inference/models/{model_id}"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     
-    # Attempt request with automatic retry for "Model Loading"
-    for i in range(2):
+    for attempt in range(2):
         response = requests.post(url, headers=headers, json={"inputs": prompt})
         
         if response.status_code == 200:
             return response.content
         
-        # Handle the common 503 "Loading" error
+        # Handle the 503 "Loading" status from Router
         if response.status_code == 503:
-            time.sleep(12)
+            time.sleep(15)
             continue
             
-        # Parse detailed error
         try:
-            err_data = response.json()
-            error_msg = err_data.get("error", "Unknown Router Error")
+            error_msg = response.json().get("error", f"Error {response.status_code}")
         except:
-            error_msg = f"HTTP {response.status_code}"
+            error_msg = response.text
             
         raise Exception(error_msg)
     
-    raise Exception("Visual Core timeout. The model is still warming up on the router.")
+    raise Exception("Model load-time exceeded on router. Please try again.")
 
-# --- UI RENDER ---
+# --- INTERFACE ---
 st.markdown(f"<h1 class='glow'>🚀 {SYS_NAME}</h1>", unsafe_allow_html=True)
 
 for msg in st.session_state.messages:
@@ -105,24 +100,27 @@ for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-if prompt := st.chat_input(f"Message {SYS_NAME}..."):
+if prompt := st.chat_input(f"Communicate with {SYS_NAME}..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    image_keywords = ["draw", "image", "generate", "picture", "visualize"]
+    image_keywords = ["draw", "image", "picture", "generate", "photo"]
     if any(word in prompt.lower() for word in image_keywords):
         with st.chat_message("assistant"):
-            with st.spinner(f"🎨 {IMG_GEN_NAME} routing to optimal visual provider..."):
+            with st.spinner(f"🌌 {IMG_GEN_NAME} accessing Router..."):
                 try:
                     img_bytes = generate_with_router(prompt, IMAGE_MODEL_ID)
-                    st.image(Image.open(io.BytesIO(img_bytes)), caption=f"Visualized by {IMG_GEN_NAME} (via HF Router)")
-                    st.session_state.messages.append({"role": "assistant", "content": f"Visual generated via {IMG_GEN_NAME}."})
+                    st.image(Image.open(io.BytesIO(img_bytes)), caption=f"Visualized by {IMG_GEN_NAME}")
+                    
+                    # Added Download Button for Pro quality visuals
+                    st.download_button(label="💾 Download HD Visual", data=img_bytes, file_name="genis_art.png", mime="image/png")
+                    
+                    st.session_state.messages.append({"role": "assistant", "content": f"Generated image via {IMG_GEN_NAME}."})
                 except Exception as e:
-                    st.error(f"Router Error: {e}")
-                    st.info("Tip: If Pro is busy, try Flash mode for instant results.")
+                    st.error(f"Router Exception: {e}")
     else:
-        # Standard Text Completion...
+        # Chat completion logic...
         with st.chat_message("assistant"):
             try:
                 stream = client.chat.completions.create(
@@ -139,4 +137,4 @@ if prompt := st.chat_input(f"Message {SYS_NAME}..."):
                 placeholder.markdown(full_text)
                 st.session_state.messages.append({"role": "assistant", "content": full_text})
             except Exception as e:
-                st.error(f"Core Processing Error: {e}")
+                st.error(f"Genis Processing Error: {e}")
