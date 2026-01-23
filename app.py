@@ -24,20 +24,21 @@ st.markdown("""
 # --- SIDEBAR & MODEL SELECTION ---
 with st.sidebar:
     st.markdown("### 🌌 Genis Control Hub")
-    model_version = st.radio("Select System Version:", ("Genis 1.2 (Flash)", "Genis 2.0 (Pro)"), index=1) # Default to Pro
+    model_version = st.radio("Select System Version:", ("Genis 1.2 (Flash)", "Genis 2.0 (Pro)"), index=1)
     
     st.markdown("---")
     
     if model_version == "Genis 1.2 (Flash)":
-        st.info("⚡ **Flash Mode**\n\n• Brain: Genis 1.2\n• Vision: SmartBot Ludy 1.2")
+        st.info("⚡ **Flash Mode**\n\n• Brain: Genis 1.2\n• Vision: Ludy 1.2 (Fast)")
         TEXT_MODEL_ID = "llama-3.1-8b-instant"
-        IMAGE_MODEL_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
+        # Using the standard reliable FLUX-Schnell endpoint
+        IMAGE_MODEL_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
         SYS_NAME, IMG_GEN_NAME = "Genis 1.2", "SmartBot Ludy 1.2"
     else:
-        st.success("🚀 **Pro Mode**\n\n• Brain: Genis 2.0 (Llama 3.3 70B)\n• Vision: SmartBot Ludy 2.0 (FLUX.2 Dev)")
+        st.success("🚀 **Pro Mode**\n\n• Brain: Genis 2.0 (70B)\n• Vision: Ludy 2.0 (High-Def)")
         TEXT_MODEL_ID = "llama-3.3-70b-versatile" 
-        # UPGRADED: Using FLUX.2 Dev for "Pro" quality
-        IMAGE_MODEL_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-dev"
+        # UPDATED: Using Stable Diffusion 3.5 Large - The current 2026 Pro Standard for API
+        IMAGE_MODEL_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-3.5-large"
         SYS_NAME, IMG_GEN_NAME = "Genis 2.0", "SmartBot Ludy 2.0"
 
     if st.button("🗑️ Clear Memory"):
@@ -50,37 +51,42 @@ def get_clients():
         g_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         hf_token = st.secrets["HF_TOKEN"]
         return g_client, hf_token
-    except:
-        st.error("Missing API Keys in Secrets!")
+    except Exception:
+        st.error("Missing API Keys! Ensure GROQ_API_KEY and HF_TOKEN are in secrets.")
         st.stop()
 
 client, HF_TOKEN = get_clients()
 
-# --- INITIALIZE SYSTEM PROMPT ---
+# --- SYSTEM PROMPT ---
 current_system_prompt = {
     "role": "system", 
-    "content": f"You are {SYS_NAME} by BotDevelopmentAI. Use '{IMG_GEN_NAME}' for images. Never mention Meta/Llama."
+    "content": f"You are {SYS_NAME} by BotDevelopmentAI. Use '{IMG_GEN_NAME}' for images. Keep it professional."
 }
 
 if "messages" not in st.session_state or not st.session_state.messages:
     st.session_state.messages = [current_system_prompt]
 
-# --- IMAGE GENERATION (With Auto-Retry) ---
+# --- IMAGE GENERATION (With Enhanced Error Handling) ---
 def generate_with_ludy(prompt, model_url):
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    for attempt in range(3): # Try 3 times if it's "loading"
+    # Wait for model to load if necessary (Retry loop)
+    for i in range(3):
         response = requests.post(model_url, headers=headers, json={"inputs": prompt})
         if response.status_code == 200:
             return response.content
         
-        err = response.json().get("error", "")
-        if "loading" in err.lower() or "estimated_time" in err.lower():
-            time.sleep(5) # Wait for model to load
+        try:
+            err = response.json().get("error", "Unknown Error")
+        except:
+            err = "Connection Refused"
+            
+        if "loading" in str(err).lower():
+            time.sleep(10) # Give it 10 seconds to warm up
             continue
         raise Exception(err)
-    raise Exception("Model took too long to load. Please try once more.")
+    raise Exception("The Visual Core is currently busy. Try again in 30 seconds.")
 
-# --- CHAT UI ---
+# --- UI RENDER ---
 st.markdown(f"<h1 class='glow'>🚀 {SYS_NAME}</h1>", unsafe_allow_html=True)
 
 for msg in st.session_state.messages:
@@ -93,30 +99,31 @@ if prompt := st.chat_input(f"Message {SYS_NAME}..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    image_keywords = ["draw", "image", "generate", "picture", "photo", "visualize"]
+    image_keywords = ["draw", "image", "generate", "picture", "photo"]
     if any(word in prompt.lower() for word in image_keywords):
         with st.chat_message("assistant"):
-            placeholder = st.empty()
-            placeholder.markdown(f"🎨 **{IMG_GEN_NAME}** is generating high-fidelity art...")
-            try:
-                img_bytes = generate_with_ludy(prompt, IMAGE_MODEL_URL)
-                placeholder.empty()
-                st.image(Image.open(io.BytesIO(img_bytes)), caption=f"Created by {IMG_GEN_NAME}")
-                st.session_state.messages.append({"role": "assistant", "content": f"Visual generated via {IMG_GEN_NAME}."})
-            except Exception as e:
-                st.error(f"Visual Core Error: {e}")
+            with st.spinner(f"🎨 {IMG_GEN_NAME} is processing your request..."):
+                try:
+                    img_bytes = generate_with_ludy(prompt, IMAGE_MODEL_URL)
+                    st.image(Image.open(io.BytesIO(img_bytes)), caption=f"Visualized by {IMG_GEN_NAME}")
+                    st.session_state.messages.append({"role": "assistant", "content": f"Visual generated via {IMG_GEN_NAME}."})
+                except Exception as e:
+                    st.error(f"Visual Core Error: {e}")
     else:
         with st.chat_message("assistant"):
-            completion = client.chat.completions.create(
-                model=TEXT_MODEL_ID,
-                messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
-                stream=True,
-            )
-            full_text = ""
-            text_placeholder = st.empty()
-            for chunk in completion:
-                if chunk.choices[0].delta.content:
-                    full_text += chunk.choices[0].delta.content
-                    text_placeholder.markdown(full_text + "▌")
-            text_placeholder.markdown(full_text)
-            st.session_state.messages.append({"role": "assistant", "content": full_text})
+            try:
+                stream = client.chat.completions.create(
+                    model=TEXT_MODEL_ID,
+                    messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
+                    stream=True,
+                )
+                full_text = ""
+                placeholder = st.empty()
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        full_text += chunk.choices[0].delta.content
+                        placeholder.markdown(full_text + "▌")
+                placeholder.markdown(full_text)
+                st.session_state.messages.append({"role": "assistant", "content": full_text})
+            except Exception as e:
+                st.error(f"Core Processing Error: {e}")
