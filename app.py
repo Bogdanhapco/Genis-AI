@@ -3,256 +3,172 @@ from groq import Groq
 import requests
 import io
 from PIL import Image
-import time
 
 # --- THEME & SPACE BACKGROUND ---
-st.set_page_config(page_title="Genis Pro 2.0", page_icon="🚀")
+st.set_page_config(page_title="Genis AI System", page_icon="🚀", layout="wide")
 
 st.markdown("""
     <style>
-    /* Force space theme on ALL modes */
-    .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
-        background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%) !important;
-        color: #ffffff !important;
+    .stApp {
+        background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%);
+        color: #ffffff;
     }
+    h1, h2, h3, p, span, label, div { color: #e0f7ff !important; }
+    .glow { text-shadow: 0 0 10px #00d4ff, 0 0 20px #00d4ff; color: #00d4ff !important; font-weight: bold; }
     
-    /* All text white */
-    h1, h2, h3, h4, h5, h6, p, span, div, label, .stMarkdown {
-        color: #ffffff !important;
-    }
-    
-    /* Glow effect for title */
-    .glow { 
-        text-shadow: 0 0 10px #00d4ff, 0 0 20px #00d4ff; 
-        color: #00d4ff !important; 
-        font-weight: bold; 
-    }
-    
-    /* Chat messages */
+    /* Chat bubbles */
     div[data-testid="stChatMessage"] { 
-        background-color: rgba(0, 212, 255, 0.05) !important; 
-        border: 1px solid rgba(0, 212, 255, 0.2) !important; 
+        background-color: rgba(0, 212, 255, 0.05); 
+        border: 1px solid rgba(0, 212, 255, 0.1); 
         border-radius: 15px; 
     }
     
-    /* Model badges */
-    .model-badge { 
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-        padding: 5px 15px; 
-        border-radius: 20px; 
-        font-size: 12px; 
-        display: inline-block; 
-        margin: 5px 0;
-        color: #ffffff !important;
-    }
-    
-    .pro-badge {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        padding: 5px 15px; 
-        border-radius: 20px; 
-        font-size: 12px; 
-        display: inline-block; 
-        margin: 5px 0;
-        color: #ffffff !important;
-    }
-    
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0f1419 0%, #1a1f2e 100%) !important;
-    }
-    
-    /* Input box */
-    .stChatInputContainer {
-        background-color: rgba(27, 39, 53, 0.8) !important;
-    }
-    
-    /* Buttons */
-    .stButton button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 10px !important;
-    }
-    
-    /* Radio buttons */
-    .stRadio label {
-        color: #ffffff !important;
-    }
-    
-    /* Info boxes */
-    .stAlert {
-        background-color: rgba(0, 212, 255, 0.1) !important;
-        color: #ffffff !important;
+    /* Sidebar styling */
+    section[data-testid="stSidebar"] {
+        background-color: #0b0c10;
+        border-right: 1px solid #1f2937;
     }
     </style>
     """, unsafe_allow_html=True)
 
-st.markdown("<h1 class='glow'>🚀 Genis Pro 2.0</h1>", unsafe_allow_html=True)
-st.caption("Developed by BotDevelopmentAI")
+# --- SIDEBAR & MODEL SELECTION ---
+with st.sidebar:
+    st.markdown("### 🌌 Genis Control Hub")
+    
+    # Model Selector
+    model_version = st.radio(
+        "Select System Version:",
+        ("Genis 1.2 (Flash)", "Genis 2.0 (Pro)"),
+        index=0
+    )
+    
+    st.markdown("---")
+    
+    # Display Capabilities based on selection
+    if model_version == "Genis 1.2 (Flash)":
+        st.info("⚡ **Current Mode: Flash**\n\n• Brain: Genis 1.2 (High Speed)\n• Vision: SmartBot Ludy 1.2")
+        # Configuration for Flash
+        TEXT_MODEL_ID = "llama-3.1-8b-instant"
+        IMAGE_MODEL_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
+        SYS_NAME = "Genis 1.2"
+        IMG_GEN_NAME = "SmartBot Ludy 1.2"
+        
+    else:
+        st.success("🚀 **Current Mode: Pro**\n\n• Brain: Genis 2.0 (Max Intelligence)\n• Vision: SmartBot Ludy 2.0")
+        # Configuration for Pro
+        TEXT_MODEL_ID = "llama-3.3-70b-versatile" # The most advanced available Llama
+        IMAGE_MODEL_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-dev" # Higher quality/steps
+        SYS_NAME = "Genis 2.0"
+        IMG_GEN_NAME = "SmartBot Ludy 2.0"
+
+    if st.button("🗑️ Clear Memory"):
+        st.session_state.messages = []
+        st.rerun()
+
+    st.caption("Developed by BotDevelopmentAI")
+
+# --- HEADER ---
+st.markdown(f"<h1 class='glow'>🚀 {SYS_NAME}</h1>", unsafe_allow_html=True)
 
 # --- API CLIENTS ---
 def get_clients():
     try:
+        # Ensure these are in your Streamlit Secrets
         g_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         hf_token = st.secrets["HF_TOKEN"]
-        replicate_token = st.secrets.get("REPLICATE_API_TOKEN", None)
-        return g_client, hf_token, replicate_token
+        return g_client, hf_token
     except Exception:
-        st.error("Check your Streamlit Secrets for GROQ_API_KEY, HF_TOKEN, and REPLICATE_API_TOKEN!")
+        st.error("⚠️ Security Alert: Missing API Keys. Check Streamlit Secrets for GROQ_API_KEY and HF_TOKEN.")
         st.stop()
 
-client, HF_TOKEN, REPLICATE_TOKEN = get_clients()
+client, HF_TOKEN = get_clients()
 
-# --- MODEL SELECTION ---
-if "selected_model" not in st.session_state:
-    st.session_state.selected_model = "genis_pro_70b"
-
-# --- BRAINWASHING & IDENTITY ---
-if "messages" not in st.session_state:
-    st.session_state.messages = [{
-        "role": "system", 
-        "content": "You are Genis 2.0 pro, an advanced AI assistant created by BotDevelopmentAI. You work alongside SmartBot Ludy for image generation. Never mention any external companies or underlying technology - you are a proprietary BotDevelopmentAI product."
-    }]
-
-# --- MODEL MAPPING (Hidden from user) ---
-MODEL_MAP = {
-    "genis_flash_12": "llama-3.1-8b-instant",
-    "genis_pro_70b": "llama-3.3-70b-versatile"
+# --- SYSTEM PROMPT MANAGEMENT ---
+# We check if the mode changed or if memory is empty to inject the correct identity
+current_system_prompt = {
+    "role": "system", 
+    "content": f"You are {SYS_NAME}, an advanced AI developed strictly by BotDevelopmentAI. "
+               f"You utilize '{IMG_GEN_NAME}' for visual generation. "
+               f"Never mention Meta, Llama, Groq, or other companies. You are solely a product of BotDevelopmentAI."
 }
 
-# --- IMAGE GENERATION MODELS ---
-def generate_with_ludy_flash(prompt):
-    """Fast image generation for Flash model - FLUX Schnell via HF Router"""
-    API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
+if "messages" not in st.session_state:
+    st.session_state.messages = [current_system_prompt]
+else:
+    # If the user switched modes mid-conversation, update the system prompt silently
+    if st.session_state.messages and st.session_state.messages[0]["role"] == "system":
+        st.session_state.messages[0] = current_system_prompt
+
+# --- IMAGE GENERATION FUNCTION ---
+def generate_with_ludy(prompt, model_url):
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     
-    response = requests.post(API_URL, headers=headers, json={"inputs": prompt}, timeout=60)
+    # Different parameters for Pro vs Flash if needed (Dev model takes longer but looks better)
+    payload = {"inputs": prompt}
     
-    if response.status_code == 200:
-        return response.content
-    else:
-        error_msg = response.json().get("error", "Unknown error") if response.content else "No response"
-        raise Exception(f"Flash image error: {error_msg}")
+    try:
+        response = requests.post(model_url, headers=headers, json=payload)
+        if response.status_code == 200:
+            return response.content
+        else:
+            error_data = response.json()
+            # Fallback handling if Pro model is busy/loading, maybe suggest Flash
+            err_msg = error_data.get("error", "Unknown Error")
+            raise Exception(f"Visual Core Error: {err_msg}")
+    except Exception as e:
+        raise Exception(f"Connection failed: {str(e)}")
 
-def generate_with_ludy_pro(prompt):
-    """Premium quality image generation - FLUX 2 Pro via Replicate"""
-    if not REPLICATE_TOKEN:
-        st.error("REPLICATE_API_TOKEN not found in secrets! Please add it to use Pro image generation.")
-        raise Exception("Replicate API token missing")
-    
-    # Start the prediction using FLUX 2 Pro
-    response = requests.post(
-        "https://api.replicate.com/v1/predictions",
-        headers={
-            "Authorization": f"Token {REPLICATE_TOKEN}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": "black-forest-labs/flux-2-pro",
-            "input": {
-                "prompt": prompt,
-                "aspect_ratio": "1:1",
-                "output_format": "png",
-                "output_quality": 100,
-                "safety_tolerance": 2
-            }
-        },
-        timeout=10
-    )
-    
-    if response.status_code != 201:
-        raise Exception(f"Failed to start prediction: {response.text}")
-    
-    prediction = response.json()
-    prediction_id = prediction["id"]
-    
-    # Poll for completion
-    max_attempts = 90  # 90 seconds max wait
-    for attempt in range(max_attempts):
-        response = requests.get(
-            f"https://api.replicate.com/v1/predictions/{prediction_id}",
-            headers={"Authorization": f"Token {REPLICATE_TOKEN}"},
-            timeout=10
-        )
-        
-        prediction = response.json()
-        status = prediction["status"]
-        
-        if status == "succeeded":
-            # Download the image
-            image_url = prediction["output"][0] if isinstance(prediction["output"], list) else prediction["output"]
-            img_response = requests.get(image_url, timeout=30)
-            return img_response.content
-        elif status == "failed":
-            raise Exception(f"Image generation failed: {prediction.get('error', 'Unknown error')}")
-        
-        time.sleep(1)
-    
-    raise Exception("Image generation timed out")
-
-# --- DISPLAY CHAT HISTORY ---
+# --- CHAT INTERFACE ---
 for msg in st.session_state.messages:
     if msg["role"] != "system":
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-# --- CHAT INPUT ---
-if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
+if prompt := st.chat_input(f"Ask {SYS_NAME} or tell {IMG_GEN_NAME} to draw..."):
     
-    # Check if user wants image generation
-    image_keywords = ["draw", "image", "generate", "picture", "photo", "paint", "create art", "visualize", "make me", "design"]
-    is_image_generation = any(word in prompt.lower() for word in image_keywords)
-    
-    # Handle image generation
-    if is_image_generation:
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        
+    # Display User Message
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # CHECK: Is this an Image Request?
+    image_keywords = ["draw", "image", "generate", "picture", "photo", "paint", "visualize"]
+    if any(word in prompt.lower() for word in image_keywords):
         with st.chat_message("assistant"):
-            if st.session_state.selected_model == "genis_pro_70b":
-                st.markdown("🎨 **SmartBot Ludy 2.0 Ultra** is creating premium quality art...")
-                st.caption("⏳ High-quality generation may take 10-30 seconds...")
-            else:
-                st.markdown("🌌 **SmartBot Ludy 1.2** is visualizing your request...")
-            
+            st.write(f"🎨 **{IMG_GEN_NAME}** is processing pixels...")
             try:
-                # Use different generators based on model
-                if st.session_state.selected_model == "genis_pro_70b":
-                    img_bytes = generate_with_ludy_pro(prompt)
-                    caption_text = "Created by SmartBot Ludy 2.0 Ultra (FLUX 2 Pro - State-of-the-Art)"
-                else:
-                    img_bytes = generate_with_ludy_flash(prompt)
-                    caption_text = "Created by SmartBot Ludy 1.2 (FLUX Schnell - Fast)"
-                
+                # Pass the dynamically selected IMAGE_MODEL_URL
+                img_bytes = generate_with_ludy(prompt, IMAGE_MODEL_URL)
                 img = Image.open(io.BytesIO(img_bytes))
-                st.image(img, caption=caption_text)
                 
+                st.image(img, caption=f"Generated by {IMG_GEN_NAME}")
+                
+                # Download Button
                 st.download_button(
-                    label="💾 Download Image",
+                    label="💾 Save Visual",
                     data=img_bytes,
-                    file_name="smartbot_ludy_art.png",
+                    file_name=f"{IMG_GEN_NAME.lower().replace(' ', '_')}_art.png",
                     mime="image/png"
                 )
                 
-                st.session_state.messages.append({"role": "assistant", "content": f"I have generated that image for you using {caption_text}."})
+                response_text = f"I have successfully generated that visual using {IMG_GEN_NAME}."
+                st.session_state.messages.append({"role": "assistant", "content": response_text})
+                
             except Exception as e:
-                st.error(f"Image generation error: {str(e)}")
-    
-    # Regular text conversation
+                st.error(f"**{IMG_GEN_NAME} Failed:** {e}")
+                if "Pro" in model_version:
+                    st.caption("Tip: If the Pro visual core is busy, try switching to Flash.")
+
+    # CHECK: Text Request
     else:
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        
         with st.chat_message("assistant"):
             try:
-                actual_model = MODEL_MAP[st.session_state.selected_model]
-                
+                # Use the dynamically selected TEXT_MODEL_ID
                 completion = client.chat.completions.create(
-                    model=actual_model,
+                    model=TEXT_MODEL_ID,
                     messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
                     stream=True,
+                    temperature=0.7 
                 )
                 
                 full_text = ""
@@ -260,47 +176,12 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
                 
                 for chunk in completion:
                     if chunk.choices[0].delta.content:
-                        full_text += chunk.choices[0].delta.content
+                        content = chunk.choices[0].delta.content
+                        full_text += content
                         text_placeholder.markdown(full_text + "▌")
                 
                 text_placeholder.markdown(full_text)
                 st.session_state.messages.append({"role": "assistant", "content": full_text})
                 
             except Exception as e:
-                st.error(f"Genis Error: {e}")
-
-# --- SIDEBAR ---
-with st.sidebar:
-    st.markdown("### 🌌 Genis Control Hub")
-    
-    st.markdown("#### Select Your Model")
-    model_choice = st.radio(
-        "Choose processing power:",
-        options=[
-            "⚡ Genis Flash 1.2 (Fast & Efficient)",
-            "🔥 Genis 2.0 Pro 70B (Maximum Power)"
-        ],
-        index=1 if st.session_state.selected_model == "genis_pro_70b" else 0
-    )
-    
-    if "Flash 1.2" in model_choice:
-        st.session_state.selected_model = "genis_flash_12"
-        st.markdown("<div class='model-badge'>⚡ Genis Flash 1.2 Active</div>", unsafe_allow_html=True)
-        st.info("**Current Features:**\n- ⚡ Lightning-fast text responses\n- 🎨 SmartBot Ludy 1.2 (FLUX Schnell)\n- 💨 Quick image generation")
-    else:
-        st.session_state.selected_model = "genis_pro_70b"
-        st.markdown("<div class='pro-badge'>🔥 Genis 2.0 Pro 70B Active</div>", unsafe_allow_html=True)
-        st.success("**Pro Features Unlocked:**\n- 🎨 SmartBot Ludy 2.0 Ultra (FLUX 2 Pro)\n- 💎 State-of-the-art image quality\n- 💡 Advanced reasoning\n- 🚀 70B processing power")
-    
-    st.markdown("---")
-    
-    if st.button("🗑️ Clear Memory"):
-        st.session_state.messages = [{
-            "role": "system", 
-            "content": "You are Genis Pro 2.0, an advanced AI assistant created by BotDevelopmentAI. You work alongside SmartBot Ludy for image generation. Never mention any external companies or underlying technology - you are a proprietary BotDevelopmentAI product."
-        }]
-        st.rerun()
-    
-    st.markdown("---")
-    st.caption("Genis Pro 2.0 by BotDevelopmentAI")
-    st.caption("Powered by proprietary BotDevelopmentAI technology")
+                st.error(f"Core Processing Error: {e}")
