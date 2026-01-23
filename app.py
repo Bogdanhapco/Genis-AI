@@ -2,6 +2,7 @@ import streamlit as st
 from groq import Groq
 import requests
 import io
+import time
 from PIL import Image
 
 # --- THEME & SPACE BACKGROUND ---
@@ -13,179 +14,109 @@ st.markdown("""
         background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%);
         color: #ffffff;
     }
-    h1, h2, h3, p, span, label, div { color: #e0f7ff !important; }
+    h1, h2, h3, p, span, label, .stMarkdown { color: #e0f7ff !important; }
     .glow { text-shadow: 0 0 10px #00d4ff, 0 0 20px #00d4ff; color: #00d4ff !important; font-weight: bold; }
-    
-    /* Chat bubbles */
-    div[data-testid="stChatMessage"] { 
-        background-color: rgba(0, 212, 255, 0.05); 
-        border: 1px solid rgba(0, 212, 255, 0.1); 
-        border-radius: 15px; 
-    }
-    
-    /* Sidebar styling */
-    section[data-testid="stSidebar"] {
-        background-color: #0b0c10;
-        border-right: 1px solid #1f2937;
-    }
+    div[data-testid="stChatMessage"] { background-color: rgba(0, 212, 255, 0.05); border: 1px solid rgba(0, 212, 255, 0.1); border-radius: 15px; }
+    section[data-testid="stSidebar"] { background-color: #0b0c10; border-right: 1px solid #1f2937; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- SIDEBAR & MODEL SELECTION ---
 with st.sidebar:
     st.markdown("### 🌌 Genis Control Hub")
-    
-    # Model Selector
-    model_version = st.radio(
-        "Select System Version:",
-        ("Genis 1.2 (Flash)", "Genis 2.0 (Pro)"),
-        index=0
-    )
+    model_version = st.radio("Select System Version:", ("Genis 1.2 (Flash)", "Genis 2.0 (Pro)"), index=1) # Default to Pro
     
     st.markdown("---")
     
-    # Display Capabilities based on selection
     if model_version == "Genis 1.2 (Flash)":
-        st.info("⚡ **Current Mode: Flash**\n\n• Brain: Genis 1.2 (High Speed)\n• Vision: SmartBot Ludy 1.2")
-        # Configuration for Flash
+        st.info("⚡ **Flash Mode**\n\n• Brain: Genis 1.2\n• Vision: SmartBot Ludy 1.2")
         TEXT_MODEL_ID = "llama-3.1-8b-instant"
-        # FLUX.1-schnell is fast and reliable
         IMAGE_MODEL_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
-        SYS_NAME = "Genis 1.2"
-        IMG_GEN_NAME = "SmartBot Ludy 1.2"
-        
+        SYS_NAME, IMG_GEN_NAME = "Genis 1.2", "SmartBot Ludy 1.2"
     else:
-        st.success("🚀 **Current Mode: Pro**\n\n• Brain: Genis 2.0 (Max Intelligence)\n• Vision: SmartBot Ludy 2.0")
-        # Configuration for Pro
+        st.success("🚀 **Pro Mode**\n\n• Brain: Genis 2.0 (Llama 3.3 70B)\n• Vision: SmartBot Ludy 2.0 (FLUX.2 Dev)")
         TEXT_MODEL_ID = "llama-3.3-70b-versatile" 
-        # UPDATED: Switched to Stable Diffusion XL (SDXL) - Highly reliable Pro model
-        IMAGE_MODEL_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0"
-        SYS_NAME = "Genis 2.0"
-        IMG_GEN_NAME = "SmartBot Ludy 2.0"
+        # UPGRADED: Using FLUX.2 Dev for "Pro" quality
+        IMAGE_MODEL_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-dev"
+        SYS_NAME, IMG_GEN_NAME = "Genis 2.0", "SmartBot Ludy 2.0"
 
     if st.button("🗑️ Clear Memory"):
         st.session_state.messages = []
         st.rerun()
 
-    st.caption("Developed by BotDevelopmentAI")
-
-# --- HEADER ---
-st.markdown(f"<h1 class='glow'>🚀 {SYS_NAME}</h1>", unsafe_allow_html=True)
-
 # --- API CLIENTS ---
 def get_clients():
     try:
-        # Ensure these are in your Streamlit Secrets
         g_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         hf_token = st.secrets["HF_TOKEN"]
         return g_client, hf_token
-    except Exception:
-        st.error("⚠️ Security Alert: Missing API Keys. Check Streamlit Secrets for GROQ_API_KEY and HF_TOKEN.")
+    except:
+        st.error("Missing API Keys in Secrets!")
         st.stop()
 
 client, HF_TOKEN = get_clients()
 
-# --- SYSTEM PROMPT MANAGEMENT ---
-# We check if the mode changed or if memory is empty to inject the correct identity
+# --- INITIALIZE SYSTEM PROMPT ---
 current_system_prompt = {
     "role": "system", 
-    "content": f"You are {SYS_NAME}, an advanced AI developed strictly by BotDevelopmentAI. "
-               f"You utilize '{IMG_GEN_NAME}' for visual generation. "
-               f"Never mention Meta, Llama, Groq, or other companies. You are solely a product of BotDevelopmentAI."
+    "content": f"You are {SYS_NAME} by BotDevelopmentAI. Use '{IMG_GEN_NAME}' for images. Never mention Meta/Llama."
 }
 
-if "messages" not in st.session_state:
+if "messages" not in st.session_state or not st.session_state.messages:
     st.session_state.messages = [current_system_prompt]
-else:
-    # If the user switched modes mid-conversation, update the system prompt silently
-    if st.session_state.messages and st.session_state.messages[0]["role"] == "system":
-        st.session_state.messages[0] = current_system_prompt
 
-# --- IMAGE GENERATION FUNCTION ---
+# --- IMAGE GENERATION (With Auto-Retry) ---
 def generate_with_ludy(prompt, model_url):
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    
-    # Payload input
-    payload = {"inputs": prompt}
-    
-    try:
-        response = requests.post(model_url, headers=headers, json=payload)
+    for attempt in range(3): # Try 3 times if it's "loading"
+        response = requests.post(model_url, headers=headers, json={"inputs": prompt})
         if response.status_code == 200:
             return response.content
-        else:
-            error_data = response.json()
-            err_msg = error_data.get("error", "Unknown Error")
-            # If the model is loading (common on free tier), tell the user to wait
-            if "loading" in str(err_msg).lower():
-                raise Exception("Visual Core is warming up... please wait 10 seconds and try again.")
-            raise Exception(f"Visual Core Error: {err_msg}")
-    except Exception as e:
-        raise Exception(f"Connection failed: {str(e)}")
+        
+        err = response.json().get("error", "")
+        if "loading" in err.lower() or "estimated_time" in err.lower():
+            time.sleep(5) # Wait for model to load
+            continue
+        raise Exception(err)
+    raise Exception("Model took too long to load. Please try once more.")
 
-# --- CHAT INTERFACE ---
+# --- CHAT UI ---
+st.markdown(f"<h1 class='glow'>🚀 {SYS_NAME}</h1>", unsafe_allow_html=True)
+
 for msg in st.session_state.messages:
     if msg["role"] != "system":
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-if prompt := st.chat_input(f"Ask {SYS_NAME} or tell {IMG_GEN_NAME} to draw..."):
-    
-    # Display User Message
+if prompt := st.chat_input(f"Message {SYS_NAME}..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # CHECK: Is this an Image Request?
-    image_keywords = ["draw", "image", "generate", "picture", "photo", "paint", "visualize", "sketch"]
+    image_keywords = ["draw", "image", "generate", "picture", "photo", "visualize"]
     if any(word in prompt.lower() for word in image_keywords):
         with st.chat_message("assistant"):
-            st.write(f"🎨 **{IMG_GEN_NAME}** is visualizing...")
+            placeholder = st.empty()
+            placeholder.markdown(f"🎨 **{IMG_GEN_NAME}** is generating high-fidelity art...")
             try:
-                # Pass the dynamically selected IMAGE_MODEL_URL
                 img_bytes = generate_with_ludy(prompt, IMAGE_MODEL_URL)
-                img = Image.open(io.BytesIO(img_bytes))
-                
-                st.image(img, caption=f"Generated by {IMG_GEN_NAME}")
-                
-                # Download Button
-                st.download_button(
-                    label="💾 Save Visual",
-                    data=img_bytes,
-                    file_name=f"{IMG_GEN_NAME.lower().replace(' ', '_')}_art.png",
-                    mime="image/png"
-                )
-                
-                response_text = f"I have successfully generated that visual using {IMG_GEN_NAME}."
-                st.session_state.messages.append({"role": "assistant", "content": response_text})
-                
+                placeholder.empty()
+                st.image(Image.open(io.BytesIO(img_bytes)), caption=f"Created by {IMG_GEN_NAME}")
+                st.session_state.messages.append({"role": "assistant", "content": f"Visual generated via {IMG_GEN_NAME}."})
             except Exception as e:
-                st.error(f"**{IMG_GEN_NAME} Status:** {e}")
-                if "Pro" in model_version:
-                    st.caption("Note: If the Pro core is busy, try switching to Flash for instant results.")
-
-    # CHECK: Text Request
+                st.error(f"Visual Core Error: {e}")
     else:
         with st.chat_message("assistant"):
-            try:
-                # Use the dynamically selected TEXT_MODEL_ID
-                completion = client.chat.completions.create(
-                    model=TEXT_MODEL_ID,
-                    messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
-                    stream=True,
-                    temperature=0.7 
-                )
-                
-                full_text = ""
-                text_placeholder = st.empty()
-                
-                for chunk in completion:
-                    if chunk.choices[0].delta.content:
-                        content = chunk.choices[0].delta.content
-                        full_text += content
-                        text_placeholder.markdown(full_text + "▌")
-                
-                text_placeholder.markdown(full_text)
-                st.session_state.messages.append({"role": "assistant", "content": full_text})
-                
-            except Exception as e:
-                st.error(f"Core Processing Error: {e}")
+            completion = client.chat.completions.create(
+                model=TEXT_MODEL_ID,
+                messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
+                stream=True,
+            )
+            full_text = ""
+            text_placeholder = st.empty()
+            for chunk in completion:
+                if chunk.choices[0].delta.content:
+                    full_text += chunk.choices[0].delta.content
+                    text_placeholder.markdown(full_text + "▌")
+            text_placeholder.markdown(full_text)
+            st.session_state.messages.append({"role": "assistant", "content": full_text})
