@@ -10,14 +10,88 @@ st.set_page_config(page_title="Genis Pro 2.0", page_icon="🚀")
 
 st.markdown("""
     <style>
-    .stApp {
-        background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%);
-        color: #ffffff;
+    /* Force space theme on ALL modes */
+    .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
+        background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%) !important;
+        color: #ffffff !important;
     }
-    h1, h2, h3, p, span { color: #e0f7ff !important; }
-    .glow { text-shadow: 0 0 10px #00d4ff, 0 0 20px #00d4ff; color: #00d4ff !important; font-weight: bold; }
-    div[data-testid="stChatMessage"] { background-color: rgba(0, 212, 255, 0.05); border: 1px solid rgba(0, 212, 255, 0.1); border-radius: 15px; }
-    .model-badge { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 5px 15px; border-radius: 20px; font-size: 12px; display: inline-block; margin: 5px 0; }
+    
+    /* All text white */
+    h1, h2, h3, h4, h5, h6, p, span, div, label, .stMarkdown {
+        color: #ffffff !important;
+    }
+    
+    /* Glow effect for title */
+    .glow { 
+        text-shadow: 0 0 10px #00d4ff, 0 0 20px #00d4ff; 
+        color: #00d4ff !important; 
+        font-weight: bold; 
+    }
+    
+    /* Chat messages */
+    div[data-testid="stChatMessage"] { 
+        background-color: rgba(0, 212, 255, 0.05) !important; 
+        border: 1px solid rgba(0, 212, 255, 0.2) !important; 
+        border-radius: 15px; 
+    }
+    
+    /* Model badges */
+    .model-badge { 
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+        padding: 5px 15px; 
+        border-radius: 20px; 
+        font-size: 12px; 
+        display: inline-block; 
+        margin: 5px 0;
+        color: #ffffff !important;
+    }
+    
+    .pro-badge {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        padding: 5px 15px; 
+        border-radius: 20px; 
+        font-size: 12px; 
+        display: inline-block; 
+        margin: 5px 0;
+        color: #ffffff !important;
+    }
+    
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0f1419 0%, #1a1f2e 100%) !important;
+    }
+    
+    /* Input box */
+    .stChatInputContainer {
+        background-color: rgba(27, 39, 53, 0.8) !important;
+    }
+    
+    /* Buttons */
+    .stButton button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 10px !important;
+    }
+    
+    /* File uploader */
+    [data-testid="stFileUploader"] {
+        background-color: rgba(0, 212, 255, 0.05) !important;
+        border: 2px dashed rgba(0, 212, 255, 0.3) !important;
+        border-radius: 10px !important;
+        padding: 20px !important;
+    }
+    
+    /* Radio buttons */
+    .stRadio label {
+        color: #ffffff !important;
+    }
+    
+    /* Info boxes */
+    .stAlert {
+        background-color: rgba(0, 212, 255, 0.1) !important;
+        color: #ffffff !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -54,8 +128,9 @@ MODEL_MAP = {
     "genis_vision": "llama-3.2-90b-vision-preview"
 }
 
-# --- SMARTBOT LUDY (Image Generation) ---
-def generate_with_ludy(prompt):
+# --- IMAGE GENERATION MODELS ---
+def generate_with_ludy_flash(prompt):
+    """Fast image generation for Flash model"""
     API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     
@@ -65,7 +140,21 @@ def generate_with_ludy(prompt):
         return response.content
     else:
         error_msg = response.json().get("error", "Unknown error") if response.content else "No response"
-        raise Exception(f"Ludy Error {response.status_code}: {error_msg}")
+        raise Exception(f"Image generation error: {error_msg}")
+
+def generate_with_ludy_pro(prompt):
+    """High-quality image generation for Pro model"""
+    API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-dev"
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    
+    response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
+    
+    if response.status_code == 200:
+        return response.content
+    else:
+        # Fallback to schnell if dev fails
+        st.warning("Switching to alternative image generator...")
+        return generate_with_ludy_flash(prompt)
 
 # --- IMAGE TO BASE64 CONVERTER ---
 def image_to_base64(uploaded_file):
@@ -73,7 +162,7 @@ def image_to_base64(uploaded_file):
     base64_image = base64.b64encode(bytes_data).decode('utf-8')
     return base64_image
 
-# --- MAIN CHAT LOGIC ---
+# --- DISPLAY CHAT HISTORY ---
 for msg in st.session_state.messages:
     if msg["role"] != "system":
         with st.chat_message(msg["role"]):
@@ -86,12 +175,21 @@ for msg in st.session_state.messages:
             else:
                 st.markdown(msg["content"])
 
-# --- IMAGE UPLOAD ---
-uploaded_image = st.file_uploader("📸 Upload an image for analysis", type=["png", "jpg", "jpeg"], key="image_uploader")
+# --- CONDITIONAL FILE UPLOADER (Only for Pro 70B) ---
+uploaded_image = None
+if st.session_state.selected_model == "genis_pro_70b":
+    st.markdown("### 📎 Pro Feature: Image Analysis")
+    uploaded_image = st.file_uploader(
+        "Upload an image to analyze (PNG, JPG, JPEG)", 
+        type=["png", "jpg", "jpeg"], 
+        key="image_uploader",
+        help="This feature is only available with Genis 2.0 Pro 70B"
+    )
 
+# --- CHAT INPUT ---
 if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
-    # Handle image analysis
-    if uploaded_image is not None:
+    # Handle image analysis (Pro model only)
+    if uploaded_image is not None and st.session_state.selected_model == "genis_pro_70b":
         base64_image = image_to_base64(uploaded_image)
         
         user_message = {
@@ -115,7 +213,7 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
         # Use vision model for image analysis
         with st.chat_message("assistant"):
             try:
-                st.info("🔍 Genis Vision Analyzer is processing your image...")
+                st.markdown("🔍 **Genis Vision Analyzer** is processing your image...")
                 
                 completion = client.chat.completions.create(
                     model=MODEL_MAP["genis_vision"],
@@ -137,7 +235,6 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
             except Exception as e:
                 st.error(f"Vision Analysis Error: {e}")
         
-        # Clear the uploader
         st.rerun()
     
     else:
@@ -147,14 +244,25 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
             st.markdown(prompt)
 
         # Check if user wants image generation
-        image_keywords = ["draw", "image", "generate", "picture", "photo", "paint", "create art", "visualize"]
+        image_keywords = ["draw", "image", "generate", "picture", "photo", "paint", "create art", "visualize", "make me"]
         if any(word in prompt.lower() for word in image_keywords):
             with st.chat_message("assistant"):
-                st.write("🌌 **SmartBot Ludy** is visualizing your request...")
+                if st.session_state.selected_model == "genis_pro_70b":
+                    st.markdown("🎨 **SmartBot Ludy Pro** is creating high-quality art...")
+                else:
+                    st.markdown("🌌 **SmartBot Ludy** is visualizing your request...")
+                
                 try:
-                    img_bytes = generate_with_ludy(prompt)
+                    # Use different generators based on model
+                    if st.session_state.selected_model == "genis_pro_70b":
+                        img_bytes = generate_with_ludy_pro(prompt)
+                        caption_text = "Created by SmartBot Ludy Pro (High Quality)"
+                    else:
+                        img_bytes = generate_with_ludy_flash(prompt)
+                        caption_text = "Created by SmartBot Ludy (Fast Generation)"
+                    
                     img = Image.open(io.BytesIO(img_bytes))
-                    st.image(img, caption="Created by SmartBot Ludy")
+                    st.image(img, caption=caption_text)
                     
                     st.download_button(
                         label="💾 Download Image",
@@ -163,15 +271,14 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
                         mime="image/png"
                     )
                     
-                    st.session_state.messages.append({"role": "assistant", "content": "I have generated that image for you using SmartBot Ludy."})
+                    st.session_state.messages.append({"role": "assistant", "content": f"I have generated that image for you using {caption_text}."})
                 except Exception as e:
-                    st.error(f"Ludy says: {str(e)}")
+                    st.error(f"Image generation error: {str(e)}")
         
         # Regular text conversation
         else:
             with st.chat_message("assistant"):
                 try:
-                    # Use selected model
                     actual_model = MODEL_MAP[st.session_state.selected_model]
                     
                     completion = client.chat.completions.create(
@@ -202,8 +309,8 @@ with st.sidebar:
     model_choice = st.radio(
         "Choose processing power:",
         options=[
-            "Genis Flash 1.2 (Fast & Efficient)",
-            "Genis 2.0 Pro 70B (Maximum Power)"
+            "⚡ Genis Flash 1.2 (Fast & Efficient)",
+            "🔥 Genis 2.0 Pro 70B (Maximum Power + Vision)"
         ],
         index=1 if st.session_state.selected_model == "genis_pro_70b" else 0
     )
@@ -211,14 +318,14 @@ with st.sidebar:
     if "Flash 1.2" in model_choice:
         st.session_state.selected_model = "genis_flash_12"
         st.markdown("<div class='model-badge'>⚡ Genis Flash 1.2 Active</div>", unsafe_allow_html=True)
+        st.info("**Current Features:**\n- Fast text responses\n- Quick image generation with SmartBot Ludy")
     else:
         st.session_state.selected_model = "genis_pro_70b"
-        st.markdown("<div class='model-badge'>🔥 Genis 2.0 Pro 70B Active</div>", unsafe_allow_html=True)
+        st.markdown("<div class='pro-badge'>🔥 Genis 2.0 Pro 70B Active</div>", unsafe_allow_html=True)
+        st.success("**Pro Features Unlocked:**\n- 📎 Image upload & analysis\n- 🎨 High-quality image generation\n- 🔍 Genis Vision Analyzer\n- 💡 Advanced reasoning")
     
     st.markdown("---")
-    st.info("**🎨 SmartBot Ludy** handles image generation\n\n**🔍 Genis Vision** handles image analysis")
     
-    st.markdown("---")
     if st.button("🗑️ Clear Memory"):
         st.session_state.messages = [{
             "role": "system", 
