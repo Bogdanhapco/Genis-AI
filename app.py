@@ -135,12 +135,12 @@ def generate_with_ludy_flash(prompt):
         raise Exception(f"Flash image error: {error_msg}")
 
 def generate_with_ludy_pro(prompt):
-    """Premium quality image generation - FLUX Pro via Replicate"""
+    """Premium quality image generation - FLUX 2 Pro via Replicate"""
     if not REPLICATE_TOKEN:
         st.error("REPLICATE_API_TOKEN not found in secrets! Please add it to use Pro image generation.")
         raise Exception("Replicate API token missing")
     
-    # Start the prediction
+    # Start the prediction using FLUX 2 Pro
     response = requests.post(
         "https://api.replicate.com/v1/predictions",
         headers={
@@ -148,7 +148,7 @@ def generate_with_ludy_pro(prompt):
             "Content-Type": "application/json",
         },
         json={
-            "version": "39b3434f194ac0a1fc907ce8c9c42c0f3a25f89c76aeb83d4db5b7c6bb6d288b",  # FLUX Pro 1.1
+            "model": "black-forest-labs/flux-2-pro",
             "input": {
                 "prompt": prompt,
                 "aspect_ratio": "1:1",
@@ -167,7 +167,7 @@ def generate_with_ludy_pro(prompt):
     prediction_id = prediction["id"]
     
     # Poll for completion
-    max_attempts = 60  # 60 seconds max wait
+    max_attempts = 90  # 90 seconds max wait
     for attempt in range(max_attempts):
         response = requests.get(
             f"https://api.replicate.com/v1/predictions/{prediction_id}",
@@ -220,7 +220,7 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
                 # Use different generators based on model
                 if st.session_state.selected_model == "genis_pro_70b":
                     img_bytes = generate_with_ludy_pro(prompt)
-                    caption_text = "Created by SmartBot Ludy 2.0 Ultra (FLUX Pro 1.1 - Maximum Quality)"
+                    caption_text = "Created by SmartBot Ludy 2.0 Ultra (FLUX 2 Pro - State-of-the-Art)"
                 else:
                     img_bytes = generate_with_ludy_flash(prompt)
                     caption_text = "Created by SmartBot Ludy 1.2 (FLUX Schnell - Fast)"
@@ -290,7 +290,7 @@ with st.sidebar:
     else:
         st.session_state.selected_model = "genis_pro_70b"
         st.markdown("<div class='pro-badge'>🔥 Genis 2.0 Pro 70B Active</div>", unsafe_allow_html=True)
-        st.success("**Pro Features Unlocked:**\n- 🎨 SmartBot Ludy 2.0 Ultra (FLUX Pro 1.1)\n- 💎 Maximum quality images\n- 💡 Advanced reasoning\n- 🚀 70B processing power")
+        st.success("**Pro Features Unlocked:**\n- 🎨 SmartBot Ludy 2.0 Ultra (FLUX 2 Pro)\n- 💎 State-of-the-art image quality\n- 💡 Advanced reasoning\n- 🚀 70B processing power")
     
     st.markdown("---")
     
