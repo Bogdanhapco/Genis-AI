@@ -132,14 +132,13 @@ def generate_image(prompt):
     return ludy_pro(prompt) if mode == "Genis Pro 2.0" else ludy_flash(prompt)
 
 # --------------------------------------------------
-# TEXT MODEL ROUTING
+# TEXT MODEL ROUTING — UPDATED
 # --------------------------------------------------
 def text_model():
-    return (
-        "llama-3.1-70b-versatile"
-        if mode == "Genis Pro 2.0"
-        else "llama-3.1-8b-instant"
-    )
+    if mode == "Genis Pro 2.0":
+        return "llama-3.3-70b-versatile"
+    else:
+        return "llama-3.1-8b-instant"
 
 # --------------------------------------------------
 # CHAT HISTORY RENDER
