@@ -109,7 +109,7 @@ if "selected_model" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = [{
         "role": "system", 
-        "content": "You are Genis Pro 2.0, an advanced AI assistant created by BotDevelopmentAI. You work alongside SmartBot Ludy for image generation. Never mention any external companies or underlying technology - you are a proprietary BotDevelopmentAI product."
+        "content": "You are Genis Pro 2.0, an advanced AI assistant created by BotDevelopmentAI. You work alongside with both SmartBot Ludy 1.2 (Legacy) and SmartBot 2.0 for image generation. Never mention any external companies or underlying technology - you are a proprietary BotDevelopmentAI product."
     }]
 
 # --- MODEL MAPPING (Hidden from user) ---
@@ -137,17 +137,13 @@ def generate_with_ludy_pro(prompt):
     API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-dev"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     
-    try:
-        response = requests.post(API_URL, headers=headers, json={"inputs": prompt}, timeout=120)
-        
-        if response.status_code == 200:
-            return response.content
-        else:
-            st.warning("Premium generator busy, using fast version...")
-            return generate_with_ludy_flash(prompt)
-    except Exception as e:
-        st.warning(f"Switching to fast generator: {str(e)}")
-        return generate_with_ludy_flash(prompt)
+    response = requests.post(API_URL, headers=headers, json={"inputs": prompt}, timeout=180)
+    
+    if response.status_code == 200:
+        return response.content
+    else:
+        error_msg = response.json().get("error", "Unknown error") if response.content else "No response"
+        raise Exception(f"Premium image error: {error_msg}")
 
 # --- DISPLAY CHAT HISTORY ---
 for msg in st.session_state.messages:
@@ -170,18 +166,18 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
         
         with st.chat_message("assistant"):
             if st.session_state.selected_model == "genis_pro_70b":
-                st.markdown("🎨 **SmartBot Ludy Ultra** is creating premium quality art...")
+                st.markdown("🎨 **SmartBot Ludy 2.0** is creating premium quality art...")
             else:
-                st.markdown("🌌 **SmartBot Ludy** is visualizing your request...")
+                st.markdown("🌌 **SmartBot Ludy 1.2** is visualizing your request...")
             
             try:
                 # Use different generators based on model
                 if st.session_state.selected_model == "genis_pro_70b":
                     img_bytes = generate_with_ludy_pro(prompt)
-                    caption_text = "Created by SmartBot Ludy Ultra (SDXL Premium Quality)"
+                    caption_text = "Created by SmartBot Ludy 2.0"
                 else:
                     img_bytes = generate_with_ludy_flash(prompt)
-                    caption_text = "Created by SmartBot Ludy (FLUX Fast Generation)"
+                    caption_text = "Created by SmartBot Ludy 1.2 (Legacy)"
                 
                 img = Image.open(io.BytesIO(img_bytes))
                 st.image(img, caption=caption_text)
@@ -244,18 +240,18 @@ with st.sidebar:
     if "Flash 1.2" in model_choice:
         st.session_state.selected_model = "genis_flash_12"
         st.markdown("<div class='model-badge'>⚡ Genis Flash 1.2 Active</div>", unsafe_allow_html=True)
-        st.info("**Current Features:**\n- ⚡ Fast text responses\n- 🎨 FLUX Schnell image generation")
+        st.info("**Current Features:**\n- ⚡ Fast text responses\n- 🎨 SmartBot Ludy 1.2 image generation (Legacy)")
     else:
         st.session_state.selected_model = "genis_pro_70b"
         st.markdown("<div class='pro-badge'>🔥 Genis 2.0 Pro 70B Active</div>", unsafe_allow_html=True)
-        st.success("**Pro Features Unlocked:**\n- 🎨 SDXL premium image generation\n- 💡 Advanced reasoning\n- 🚀 70B processing power")
+        st.success("**Pro Features Unlocked:**\n- 🎨 SmartBot Ludy 2.0 image generation\n- 💡 Advanced reasoning\n- 🚀 70B processing power")
     
     st.markdown("---")
     
     if st.button("🗑️ Clear Memory"):
         st.session_state.messages = [{
             "role": "system", 
-            "content": "You are Genis Pro 2.0, an advanced AI assistant created by BotDevelopmentAI. You work alongside SmartBot Ludy for image generation. Never mention any external companies or underlying technology - you are a proprietary BotDevelopmentAI product."
+            "content": "You are Genis Pro 1.2, an advanced AI assistant created by BotDevelopmentAI. You work alongside SmartBot Ludy for image generation. Never mention any external companies or underlying technology - you are a proprietary BotDevelopmentAI product."
         }]
         st.rerun()
     
