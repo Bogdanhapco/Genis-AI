@@ -136,18 +136,11 @@ MODEL_MAP = {
 
 # --- IMAGE GENERATION MODELS ---
 def generate_with_ludy_flash(prompt):
-    """Fast image generation for Flash model - FLUX Schnell"""
-    API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
+    """Fast image generation for Flash model - FLUX Schnell via Router"""
+    API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "num_inference_steps": 4
-        }
-    }
-    
-    response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
+    response = requests.post(API_URL, headers=headers, json={"inputs": prompt}, timeout=60)
     
     if response.status_code == 200:
         return response.content
@@ -156,28 +149,20 @@ def generate_with_ludy_flash(prompt):
         raise Exception(f"Flash image error: {error_msg}")
 
 def generate_with_ludy_pro(prompt):
-    """Premium quality image generation - Stable Diffusion XL"""
-    API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+    """Premium quality image generation - SDXL via Router"""
+    API_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "num_inference_steps": 50,
-            "guidance_scale": 7.5
-        }
-    }
-    
     try:
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=120)
+        response = requests.post(API_URL, headers=headers, json={"inputs": prompt}, timeout=120)
         
         if response.status_code == 200:
             return response.content
         else:
             st.warning("Premium generator busy, using backup...")
-            # Fallback to Dreamshaper
-            API_URL_FALLBACK = "https://api-inference.huggingface.co/models/Lykon/dreamshaper-8"
-            response = requests.post(API_URL_FALLBACK, headers=headers, json=payload, timeout=90)
+            # Fallback to alternative model via router
+            API_URL_FALLBACK = "https://router.huggingface.co/hf-inference/models/prompthero/openjourney-v4"
+            response = requests.post(API_URL_FALLBACK, headers=headers, json={"inputs": prompt}, timeout=90)
             if response.status_code == 200:
                 return response.content
             else:
