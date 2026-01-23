@@ -3,7 +3,6 @@ from groq import Groq
 import requests
 import io
 from PIL import Image
-import base64
 
 # --- THEME & SPACE BACKGROUND ---
 st.set_page_config(page_title="Genis Pro 2.0", page_icon="🚀")
@@ -74,14 +73,6 @@ st.markdown("""
         border-radius: 10px !important;
     }
     
-    /* File uploader */
-    [data-testid="stFileUploader"] {
-        background-color: rgba(0, 212, 255, 0.05) !important;
-        border: 2px dashed rgba(0, 212, 255, 0.3) !important;
-        border-radius: 10px !important;
-        padding: 20px !important;
-    }
-    
     /* Radio buttons */
     .stRadio label {
         color: #ffffff !important;
@@ -114,12 +105,6 @@ client, HF_TOKEN = get_clients()
 if "selected_model" not in st.session_state:
     st.session_state.selected_model = "genis_pro_70b"
 
-if "uploaded_image_bytes" not in st.session_state:
-    st.session_state.uploaded_image_bytes = None
-
-if "uploaded_image_b64" not in st.session_state:
-    st.session_state.uploaded_image_b64 = None
-
 # --- BRAINWASHING & IDENTITY ---
 if "messages" not in st.session_state:
     st.session_state.messages = [{
@@ -130,8 +115,7 @@ if "messages" not in st.session_state:
 # --- MODEL MAPPING (Hidden from user) ---
 MODEL_MAP = {
     "genis_flash_12": "llama-3.1-8b-instant",
-    "genis_pro_70b": "llama-3.3-70b-versatile",
-    "genis_vision": "llama-3.2-90b-vision-preview"
+    "genis_pro_70b": "llama-3.3-70b-versatile"
 }
 
 # --- IMAGE GENERATION MODELS ---
@@ -175,99 +159,17 @@ def generate_with_ludy_pro(prompt):
 for msg in st.session_state.messages:
     if msg["role"] != "system":
         with st.chat_message(msg["role"]):
-            if isinstance(msg["content"], list):
-                for item in msg["content"]:
-                    if item["type"] == "text":
-                        st.markdown(item["text"])
-                    elif item["type"] == "image_url":
-                        # Display uploaded images in chat
-                        if "base64" in item["image_url"]["url"]:
-                            st.image(item["image_url"]["url"], width=300)
-            else:
-                st.markdown(msg["content"])
-
-# --- CONDITIONAL FILE UPLOADER (Only for Pro 70B) ---
-if st.session_state.selected_model == "genis_pro_70b":
-    st.markdown("### 📎 Pro Feature: Image Analysis")
-    uploaded_image = st.file_uploader(
-        "Upload an image, then type your question below and press Enter", 
-        type=["png", "jpg", "jpeg"], 
-        key="image_uploader",
-        help="The image will be analyzed when you send your next message"
-    )
-    
-    # Store the image when uploaded
-    if uploaded_image is not None:
-        # Save image bytes and base64
-        image_bytes = uploaded_image.getvalue()
-        st.session_state.uploaded_image_bytes = image_bytes
-        st.session_state.uploaded_image_b64 = base64.b64encode(image_bytes).decode('utf-8')
-        
-        # Show preview
-        st.image(uploaded_image, caption="Image ready for analysis - Type your question below", width=300)
-        st.info("💡 Type your question about this image and press Enter to analyze it")
+            st.markdown(msg["content"])
 
 # --- CHAT INPUT ---
 if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
     
-    # Check if user wants image generation FIRST
+    # Check if user wants image generation
     image_keywords = ["draw", "image", "generate", "picture", "photo", "paint", "create art", "visualize", "make me", "design"]
     is_image_generation = any(word in prompt.lower() for word in image_keywords)
     
-    # Handle image analysis (Pro model only + image uploaded + NOT image generation request)
-    if st.session_state.uploaded_image_b64 is not None and st.session_state.selected_model == "genis_pro_70b" and not is_image_generation:
-        
-        user_message = {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{st.session_state.uploaded_image_b64}"
-                    }
-                }
-            ]
-        }
-        st.session_state.messages.append(user_message)
-        
-        with st.chat_message("user"):
-            st.markdown(prompt)
-            st.image(f"data:image/jpeg;base64,{st.session_state.uploaded_image_b64}", width=300)
-        
-        # Use vision model for image analysis
-        with st.chat_message("assistant"):
-            try:
-                st.markdown("🔍 **Genis Vision Analyzer** is processing your image...")
-                
-                # Prepare messages for API - only send the last user message with image
-                completion = client.chat.completions.create(
-                    model=MODEL_MAP["genis_vision"],
-                    messages=[
-                        {"role": "system", "content": "You are Genis Vision Analyzer, part of the Genis Pro 2.0 suite by BotDevelopmentAI. Analyze images in detail."},
-                        user_message
-                    ],
-                    temperature=0.5,
-                    max_tokens=2048,
-                )
-                
-                # Get the response
-                full_text = completion.choices[0].message.content
-                st.markdown(full_text)
-                
-                st.session_state.messages.append({"role": "assistant", "content": full_text})
-                
-            except Exception as e:
-                st.error(f"Vision Analysis Error: {str(e)}")
-                st.info("💡 Debug info: Make sure the image is under 5MB and is a valid PNG/JPG")
-        
-        # Clear the uploaded image after processing
-        st.session_state.uploaded_image_bytes = None
-        st.session_state.uploaded_image_b64 = None
-        st.rerun()
-    
     # Handle image generation
-    elif is_image_generation:
+    if is_image_generation:
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -313,7 +215,7 @@ if prompt := st.chat_input("Ask Genis or tell Ludy to draw..."):
                 
                 completion = client.chat.completions.create(
                     model=actual_model,
-                    messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages if not isinstance(m["content"], list)],
+                    messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
                     stream=True,
                 )
                 
@@ -340,7 +242,7 @@ with st.sidebar:
         "Choose processing power:",
         options=[
             "⚡ Genis Flash 1.2 (Fast & Efficient)",
-            "🔥 Genis 2.0 Pro 70B (Maximum Power + Vision)"
+            "🔥 Genis 2.0 Pro 70B (Maximum Power)"
         ],
         index=1 if st.session_state.selected_model == "genis_pro_70b" else 0
     )
@@ -352,7 +254,7 @@ with st.sidebar:
     else:
         st.session_state.selected_model = "genis_pro_70b"
         st.markdown("<div class='pro-badge'>🔥 Genis 2.0 Pro 70B Active</div>", unsafe_allow_html=True)
-        st.success("**Pro Features Unlocked:**\n- 📎 Image upload & analysis\n- 🎨 SDXL premium image generation\n- 🔍 Genis Vision Analyzer\n- 💡 Advanced reasoning")
+        st.success("**Pro Features Unlocked:**\n- 🎨 SDXL premium image generation\n- 💡 Advanced reasoning\n- 🚀 70B processing power")
     
     st.markdown("---")
     
@@ -361,8 +263,6 @@ with st.sidebar:
             "role": "system", 
             "content": "You are Genis Pro 2.0, an advanced AI assistant created by BotDevelopmentAI. You work alongside SmartBot Ludy for image generation. Never mention any external companies or underlying technology - you are a proprietary BotDevelopmentAI product."
         }]
-        st.session_state.uploaded_image_bytes = None
-        st.session_state.uploaded_image_b64 = None
         st.rerun()
     
     st.markdown("---")
