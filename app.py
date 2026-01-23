@@ -109,7 +109,7 @@ if "selected_model" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = [{
         "role": "system", 
-        "content": "You are Genis Pro 1.2, an advanced AI assistant created by BotDevelopmentAI. You work alongside SmartBot Ludy for image generation. Never mention any external companies or underlying technology - you are a proprietary BotDevelopmentAI product."
+        "content": "You are Genis 2.0 pro, an advanced AI assistant created by BotDevelopmentAI. You work alongside SmartBot Ludy for image generation. Never mention any external companies or underlying technology - you are a proprietary BotDevelopmentAI product."
     }]
 
 # --- MODEL MAPPING (Hidden from user) ---
@@ -261,11 +261,12 @@ with st.sidebar:
     if st.button("🗑️ Clear Memory"):
         st.session_state.messages = [{
             "role": "system", 
-            "content": "You are Genis Pro 2.0, an advanced AI assistant created by BotDevelopmentAI. You work alongside SmartBot Ludy for image generation. Never mention any external companies or underlying technology - you are a proprietary BotDevelopmentAI product."
+            "content": "You are Genis Pro 1.2, an advanced AI assistant created by BotDevelopmentAI. You work alongside SmartBot Ludy for image generation. Never mention any external companies or underlying technology - you are a proprietary BotDevelopmentAI product."
         }]
         st.rerun()
     
     st.markdown("---")
     st.caption("Genis Pro 2.0 by BotDevelopmentAI")
     st.caption("Powered by proprietary BotDevelopmentAI technology")
+
 
