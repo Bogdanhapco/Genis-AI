@@ -69,10 +69,10 @@ with st.sidebar:
 
     if mode == "Flash":
         selected_power = "flash"
-        display_name = "Genis Flash"
+        display_name = "Genis Flash 1.2 8B"
     else:
         selected_power = "pro"
-        display_name = "Genis Pro"
+        display_name = "Genis Pro 2.0 70B"
 
     st.caption(f"Active: **{display_name}**")
 
@@ -190,3 +190,4 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
 
             except Exception as e:
                 st.error(f"{display_name} encountered a problem: {str(e)}")
+
