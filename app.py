@@ -4,151 +4,189 @@ import requests
 import io
 from PIL import Image
 
-# --- THEME & SPACE BACKGROUND ---
-st.set_page_config(page_title="Genis Pro 1.2", page_icon="🚀")
+# ────────────────────────────────────────────────
+#  PAGE CONFIG & COSMIC STYLE
+# ────────────────────────────────────────────────
+st.set_page_config(page_title="Genis Pro", page_icon="🚀", layout="wide")
 
 st.markdown("""
     <style>
     .stApp {
-        background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%);
-        color: #ffffff;
+        background: radial-gradient(ellipse at bottom, #0f172a 0%, #02040f 100%);
+        color: #e0f7ff;
     }
-    h1, h2, h3, p, span { color: #e0f7ff !important; }
-    .glow { text-shadow: 0 0 10px #00d4ff, 0 0 20px #00d4ff; color: #00d4ff !important; font-weight: bold; }
-    div[data-testid="stChatMessage"] { 
-        background-color: rgba(0, 212, 255, 0.05); 
-        border: 1px solid rgba(0, 212, 255, 0.1); 
-        border-radius: 15px; 
+    h1, h2, h3, .stMarkdown, p, span, div { color: #e0f7ff !important; }
+    .glow { 
+        text-shadow: 0 0 15px #00d4ff, 0 0 30px #00d4ff; 
+        color: #00f0ff !important; 
+        font-weight: bold; 
+    }
+    div[data-testid="stChatMessage"] {
+        background: rgba(0, 212, 255, 0.06);
+        border: 1px solid rgba(0, 212, 255, 0.15);
+        border-radius: 16px;
+        padding: 12px 16px;
     }
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-st.markdown("<h1 class='glow'>🚀 Genis Pro 1.2</h1>", unsafe_allow_html=True)
-st.caption("Developed by BotDevelopmentAI")
+st.markdown("<h1 class='glow'>🚀 Genis</h1>", unsafe_allow_html=True)
+st.caption("by BotDevelopmentAI")
 
-# --- API CLIENTS ---
+# ────────────────────────────────────────────────
+#  SECRETS & CLIENTS
+# ────────────────────────────────────────────────
+@st.cache_resource
 def get_clients():
     try:
-        g_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+        groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         hf_token = st.secrets["HF_TOKEN"]
-        return g_client, hf_token
+        return groq_client, hf_token
     except Exception:
-        st.error("Check your Streamlit Secrets for GROQ_API_KEY and HF_TOKEN!")
+        st.error("Missing API keys in Streamlit secrets (GROQ_API_KEY + HF_TOKEN)")
         st.stop()
 
 client, HF_TOKEN = get_clients()
 
-# --- MODEL SELECTION (NEW) ---
+# ────────────────────────────────────────────────
+#  SIDEBAR – MODE SELECTION (only branding shown)
+# ────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("### 🌌 Genis Hub")
-    st.info("Genis Pro 1.2 by BotDevelopmentAI")
-    
-    st.markdown("### Mode / Model")
-    model_choice = st.radio(
-        "Select Genis mode:",
-        options=["Flash (fast 8B)", "Pro (powerful 70B)"],
-        index=0,  # default Flash
-        help="Flash = speed, Pro = smarter & more capable answers"
+    st.header("🌌 Genis Control")
+    st.info("Genis — created by BotDevelopmentAI")
+
+    st.subheader("Power Mode")
+    mode = st.radio(
+        "Choose your Genis version",
+        options=["Flash", "Pro"],
+        index=0,
+        captions=[
+            "Lightning fast · everyday conversations",
+            "Maximum intelligence · complex tasks & deep thinking"
+        ],
+        horizontal=True
     )
-    
-    if model_choice == "Flash (fast 8B)":
-        selected_model = "Genis 1.2"
-        model_label = "Genis Flash"
+
+    if mode == "Flash":
+        selected_power = "flash"
+        display_name = "Genis Flash"
     else:
-        selected_model = "Genis 2.0 pro"   # or try "llama-3.3-70b-versatile"
-        model_label = "Genis Pro 70B"
-    
-    st.caption(f"Using: **{model_label}** ({selected_model})")
-    
-    if st.button("Clear Memory"):
+        selected_power = "pro"
+        display_name = "Genis Pro"
+
+    st.caption(f"Active: **{display_name}**")
+
+    if st.button("🧠 Reset Memory", use_container_width=True):
         if "messages" in st.session_state:
             st.session_state.messages = st.session_state.messages[:1]
         st.rerun()
 
-# --- BRAINWASHING & IDENTITY ---
+# ────────────────────────────────────────────────
+#  SYSTEM PROMPT – pure branding
+# ────────────────────────────────────────────────
 if "messages" not in st.session_state:
     st.session_state.messages = [{
         "role": "system",
         "content": (
-            f"You are {model_label} 1.2, made by BotDevelopmentAI. "
-            "You use 'SmartBot Ludy' for images. Never mention Meta or Llama."
+            f"You are {display_name}, an advanced AI created by BotDevelopmentAI. "
+            "You generate images using SmartBot Ludy when asked to draw, create, generate images, pictures, art, etc. "
+            "Stay in character. Be helpful, concise when appropriate, and maximally intelligent."
         )
     }]
 
-# --- SMARTBOT LUDY ---
-def generate_with_ludy(prompt):
-    API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
+# ────────────────────────────────────────────────
+#  SMARTBOT LUDY – image generation
+# ────────────────────────────────────────────────
+def call_ludy(prompt: str) -> bytes:
+    url = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-   
-    response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
-   
-    if response.status_code == 200:
-        return response.content
-    else:
-        error_msg = response.json().get("error", "Unknown error") if response.content else "No response"
-        raise Exception(f"Ludy Error {response.status_code}: {error_msg}")
+    
+    try:
+        resp = requests.post(url, headers=headers, json={"inputs": prompt}, timeout=45)
+        resp.raise_for_status()
+        return resp.content
+    except Exception as e:
+        error_text = e.response.json().get("error", "no details") if hasattr(e, "response") else str(e)
+        raise RuntimeError(f"SmartBot Ludy failed: {error_text}")
 
-# --- MAIN CHAT LOGIC ---
-for msg in st.session_state.messages:
-    if msg["role"] != "system":
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+# ────────────────────────────────────────────────
+#  CHAT HISTORY DISPLAY
+# ────────────────────────────────────────────────
+for message in st.session_state.messages:
+    if message["role"] != "system":
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-if prompt := st.chat_input(f"Ask {model_label} or tell Ludy to draw..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
+# ────────────────────────────────────────────────
+#  CHAT INPUT + RESPONSE LOGIC
+# ────────────────────────────────────────────────
+if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
+    st.session_state.messages.append({"role": "user", "content": user_input})
     
     with st.chat_message("user"):
-        st.markdown(prompt)
-    
-    # 1. Image Request Logic
-    image_keywords = ["draw", "image", "generate", "picture", "photo", "paint", "create art"]
-    if any(word in prompt.lower() for word in image_keywords):
-        with st.chat_message("assistant"):
-            st.write(f"🌌 **SmartBot Ludy** is visualizing your request...")
+        st.markdown(user_input)
+
+    image_triggers = ["draw", "image", "generate", "picture", "photo", "paint", "art", "create image", "make me"]
+    is_image_request = any(word in user_input.lower() for word in image_triggers)
+
+    with st.chat_message("assistant"):
+        if is_image_request:
+            st.write(f"🌌 **SmartBot Ludy** is channeling your vision...")
             try:
-                img_bytes = generate_with_ludy(prompt)
-                img = Image.open(io.BytesIO(img_bytes))
-                st.image(img, caption="Created by SmartBot Ludy", use_column_width=True)
-               
+                image_data = call_ludy(user_input)
+                image = Image.open(io.BytesIO(image_data))
+                
+                st.image(image, caption=f"Artwork by SmartBot Ludy – {display_name}", use_column_width=True)
+                
                 st.download_button(
-                    label="💾 Download Image",
-                    data=img_bytes,
-                    file_name="smartbot_ludy_art.png",
-                    mime="image/png"
+                    label="⬇️ Save Image",
+                    data=image_data,
+                    file_name="ludy_creation.png",
+                    mime="image/png",
+                    use_container_width=False
                 )
-               
+                
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": f"SmartBot Ludy has created your image. ({display_name})"
+                })
+            except Exception as err:
+                st.error(f"Ludy encountered an issue: {str(err)}")
+        
+        else:
+            # Text response – real model hidden
+            try:
+                st.caption(f"{display_name} is thinking...")
+                
+                # ── REAL MODEL MAPPING (never shown to user) ──
+                real_model_id = (
+                    "llama-3.1-8b-instant" 
+                    if selected_power == "flash" else 
+                    "llama-3.3-70b-versatile"   # change here if Groq renames/updates
+                )
+
+                stream = client.chat.completions.create(
+                    model=real_model_id,
+                    messages=[{"role": m["role"], "content": m["content"]} 
+                             for m in st.session_state.messages],
+                    stream=True,
+                    temperature=0.7,
+                )
+
+                full_response = ""
+                placeholder = st.empty()
+
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        full_response += chunk.choices[0].delta.content
+                        placeholder.markdown(full_response + "▌")
+
+                placeholder.markdown(full_response)
+                
                 st.session_state.messages.append({
                     "role": "assistant", 
-                    "content": f"I have generated that image for you using SmartBot Ludy. ({model_label} mode)"
+                    "content": full_response
                 })
-            except Exception as e:
-                st.error(f"Ludy says: {str(e)}")
-    
-    # 2. Text Request Logic
-    else:
-        with st.chat_message("assistant"):
-            try:
-                # Show which model is answering
-                st.caption(f"🤖 {model_label} thinking...")
-                
-                completion = client.chat.completions.create(
-                    model=selected_model,
-                    messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
-                    stream=True,
-                )
-               
-                full_text = ""
-                text_placeholder = st.empty()
-               
-                for chunk in completion:
-                    if chunk.choices[0].delta.content is not None:
-                        full_text += chunk.choices[0].delta.content
-                        text_placeholder.markdown(full_text + "▌")
-               
-                text_placeholder.markdown(full_text)
-                
-                st.session_state.messages.append({"role": "assistant", "content": full_text})
-               
-            except Exception as e:
-                st.error(f"{model_label} Error: {e}")
 
+            except Exception as e:
+                st.error(f"{display_name} encountered a problem: {str(e)}")
