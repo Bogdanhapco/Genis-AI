@@ -52,11 +52,11 @@ with st.sidebar:
     )
     
     if model_choice == "Flash (fast 8B)":
-        selected_model = "llama-3.1-8b-instant"
+        selected_model = "Genis 1.2"
         model_label = "Genis Flash"
     else:
-        selected_model = "llama-3.1-70b-versatile"   # or try "llama-3.3-70b-versatile"
-        model_label = "Genis Pro"
+        selected_model = "Genis 2.0 pro"   # or try "llama-3.3-70b-versatile"
+        model_label = "Genis Pro 70B"
     
     st.caption(f"Using: **{model_label}** ({selected_model})")
     
@@ -151,3 +151,4 @@ if prompt := st.chat_input(f"Ask {model_label} or tell Ludy to draw..."):
                
             except Exception as e:
                 st.error(f"{model_label} Error: {e}")
+
