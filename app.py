@@ -87,7 +87,7 @@ current_system_prompt = (
     f"You are {display_name}, an advanced AI created by BotDevelopmentAI. "
     f"You are currently operating in '{selected_power}' mode. "
     "You generate images using SmartBot Ludy when asked to draw, create, generate images, pictures, art, etc. "
-    "Stay in character. Be helpful, concise when appropriate, and maximally intelligent."
+    "Stay in character. Be helpful, concise when appropriate, and maximally intelligent. and never mension that you are llama or chatgpt or openai or meta"
 )
 
 if "messages" not in st.session_state:
@@ -104,7 +104,7 @@ with st.sidebar:
 #  SMARTBOT LUDY – IMAGE GENERATION (FLUX DEV)
 # ────────────────────────────────────────────────
 def call_ludy(prompt: str) -> bytes:
-    url = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-dev"
+    url = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
 
     payload = {
@@ -197,3 +197,4 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
 
             except Exception as e:
                 st.error(f"{display_name} encountered a problem: {str(e)}")
+
