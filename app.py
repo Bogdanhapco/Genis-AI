@@ -77,8 +77,8 @@ with st.sidebar:
 
 if mode == "Flash":
     selected_power = "flash"
-    display_name = "Genis Flash 1.2 8B"
-    real_model_id = "llama-3.1-8b-instant"
+    display_name = "Genis Flash 2.0 20B"
+    real_model_id = "openai/gpt-oss-20b"
 else:
     selected_power = "pro"
     display_name = "Genis Pro 2.1 120B"
@@ -202,3 +202,4 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
 
             except Exception as e:
                 st.error(f"{display_name} encountered a problem: {str(e)}")
+
