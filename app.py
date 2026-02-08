@@ -68,12 +68,13 @@ with st.sidebar:
     )
 
     if st.button("🧠 Reset Memory", use_container_width=True):
-        st.session_state.messages = []
+        st.session_state.messages = []  # Clear history
         st.rerun()
 
 # ────────────────────────────────────────────────
-#  IDENTITY & MODEL LOGIC
+#  IDENTITY & MODEL LOGIC (The Fix)
 # ────────────────────────────────────────────────
+
 if mode == "Flash":
     selected_power = "flash"
     display_name = "Genis Flash 1.2 8B"
@@ -81,48 +82,52 @@ if mode == "Flash":
 else:
     selected_power = "pro"
     display_name = "Genis Pro 2.1 120B"
+    # Specific ID requested by user
     real_model_id = "openai/gpt-oss-120b"
 
+# 1. Define the System Prompt based on current mode
 current_system_prompt = (
     f"You are {display_name}, an advanced AI created by BotDevelopmentAI. "
     f"You are currently operating in '{selected_power}' mode. "
     "You generate images using SmartBot Ludy when asked to draw, create, generate images, pictures, art, etc. "
-    "Stay in character. Be helpful, concise when appropriate, and maximally intelligent. and never mension that you are llama or chatgpt or openai or meta"
+    "Stay in character. Be helpful, concise when appropriate, and maximally intelligent."
 )
 
+# 2. Initialize or Update History
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "system", "content": current_system_prompt}]
+    st.session_state.messages = [{
+        "role": "system",
+        "content": current_system_prompt
+    }]
 elif not st.session_state.messages:
-    st.session_state.messages.append({"role": "system", "content": current_system_prompt})
+    # Handle empty list case if needed
+    st.session_state.messages.append({
+        "role": "system",
+        "content": current_system_prompt
+    })
 
+# 3. FORCE UPDATE the system prompt (Index 0)
+# This ensures the model knows who it is immediately when you toggle the switch
 st.session_state.messages[0]["content"] = current_system_prompt
 
+# Show active identity in sidebar
 with st.sidebar:
     st.caption(f"Active Identity: **{display_name}**")
 
 # ────────────────────────────────────────────────
-#  SMARTBOT LUDY – IMAGE GENERATION (FLUX DEV)
+#  SMARTBOT LUDY – IMAGE GENERATION
 # ────────────────────────────────────────────────
 def call_ludy(prompt: str) -> bytes:
-    url = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
+    url = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "guidance_scale": 7.5,
-            "num_inference_steps": 30,
-            "width": 1024,
-            "height": 1024
-        }
-    }
-
+    
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=90)
+        resp = requests.post(url, headers=headers, json={"inputs": prompt}, timeout=45)
         resp.raise_for_status()
         return resp.content
-    except requests.exceptions.RequestException as e:
-        raise RuntimeError(f"Ludy failed: {str(e)}")
+    except Exception as e:
+        error_text = e.response.json().get("error", "no details") if hasattr(e, "response") else str(e)
+        raise RuntimeError(f"SmartBot Ludy failed: {error_text}")
 
 # ────────────────────────────────────────────────
 #  CHAT HISTORY DISPLAY
@@ -137,7 +142,7 @@ for message in st.session_state.messages:
 # ────────────────────────────────────────────────
 if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
     st.session_state.messages.append({"role": "user", "content": user_input})
-
+    
     with st.chat_message("user"):
         st.markdown(user_input)
 
@@ -146,32 +151,32 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
 
     with st.chat_message("assistant"):
         if is_image_request:
-            st.write("🌌 **Ludy (FLUX Dev)** is crafting your photoreal image...")
+            st.write(f"🌌 **Ludy 1.2** is channeling your vision...")
             try:
                 image_data = call_ludy(user_input)
                 image = Image.open(io.BytesIO(image_data))
-
-                st.image(image, caption=f"Artwork by Ludy – {display_name}", use_column_width=True)
-
+                
+                st.image(image, caption=f"Artwork by Ludy 1.2 – {display_name}", use_column_width=True)
+                
                 st.download_button(
                     label="⬇️ Save Image",
                     data=image_data,
                     file_name="ludy_creation.png",
-                    mime="image/png"
+                    mime="image/png",
+                    use_container_width=False
                 )
-
+                
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": f"Ludy has created your image. ({display_name})"
+                    "content": f"Ludy 1.2 has created your image. ({display_name})"
                 })
-
             except Exception as err:
                 st.error(f"Ludy encountered an issue: {str(err)}")
-
+        
         else:
             try:
                 st.caption(f"{display_name} is thinking...")
-
+                
                 stream = client.chat.completions.create(
                     model=real_model_id,
                     messages=[{"role": m["role"], "content": m["content"]} 
@@ -189,12 +194,11 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
                         placeholder.markdown(full_response + "▌")
 
                 placeholder.markdown(full_response)
-
+                
                 st.session_state.messages.append({
-                    "role": "assistant",
+                    "role": "assistant", 
                     "content": full_response
                 })
 
             except Exception as e:
                 st.error(f"{display_name} encountered a problem: {str(e)}")
-
