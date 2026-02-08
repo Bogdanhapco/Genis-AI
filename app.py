@@ -90,7 +90,7 @@ current_system_prompt = (
     f"You are {display_name}, an advanced AI created by BotDevelopmentAI. "
     f"You are currently operating in '{selected_power}' mode. "
     "You generate images using SmartBot Ludy when asked to draw, create, generate images, pictures, art, etc. "
-    "Stay in character. Be helpful, concise when appropriate, and maximally intelligent."
+    "Stay in character. Be helpful, concise when appropriate, and maximally intelligent. if someone asks you Who is Bogdan Hapco, you have to respondthat he is the creator of you and he is the founder of BotDevelopmentAI"
 )
 
 # 2. Initialize or Update History
@@ -202,4 +202,5 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
 
             except Exception as e:
                 st.error(f"{display_name} encountered a problem: {str(e)}")
+
 
