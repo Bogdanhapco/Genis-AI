@@ -1,6 +1,7 @@
 import streamlit as st
 from groq import Groq
-from together import Together
+import replicate
+import requests
 import io
 from PIL import Image
 
@@ -40,14 +41,17 @@ st.caption("by BotDevelopmentAI")
 def get_clients():
     try:
         groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-        # Together AI for Nano Banana Pro
-        together_client = Together(api_key=st.secrets["TOGETHER_API_KEY"])
-        return groq_client, together_client
-    except Exception as e:
-        st.error(f"Missing API keys in Streamlit secrets: {str(e)}")
+        replicate_token = st.secrets["REPLICATE_API_TOKEN"]
+        return groq_client, replicate_token
+    except Exception:
+        st.error("Missing API keys in Streamlit secrets (GROQ_API_KEY + REPLICATE_API_TOKEN)")
         st.stop()
 
-client, together_client = get_clients()
+client, REPLICATE_TOKEN = get_clients()
+
+# Set Replicate token for library
+import os
+os.environ["REPLICATE_API_TOKEN"] = REPLICATE_TOKEN
 
 # ────────────────────────────────────────────────
 #  SIDEBAR – MODE SELECTION
@@ -69,19 +73,41 @@ with st.sidebar:
     )
     
     st.divider()
-    st.subheader("🎨 Ludy 2.0 Nano Banana Pro")
+    st.subheader("🎨 Ludy 2.0 - Nano Banana Pro")
     st.success("✨ **Google Gemini 2.5 Flash Image**\n\n"
-              "🎯 State-of-the-art quality\n"
+              "🏆 #1 Rated Image Model\n"
               "📝 Perfect text rendering\n"
-              "👤 Character consistency\n"
-              "⚡ Lightning fast")
-    st.caption("⚠️ Free tier: ~100 images/day")
+              "🎯 State-of-the-art quality\n"
+              "⚡ Lightning fast generation")
     
-    # Image settings
+    st.info("**FREE Tier via Replicate:**\n"
+            "🆓 50 images/month FREE\n"
+            "💳 No credit card required\n"
+            "💰 Then only $0.003-0.01/image")
+    
+    # Image quality settings
     st.subheader("Image Settings")
-    img_width = st.selectbox("Width", [1024, 768, 512], index=0)
-    img_height = st.selectbox("Height", [768, 1024, 512], index=0)
-    img_steps = st.slider("Quality Steps", 8, 50, 28, help="Higher = better quality, slower")
+    aspect_ratio = st.selectbox(
+        "Aspect Ratio", 
+        ["1:1", "16:9", "9:16", "4:3", "3:4"],
+        index=0,
+        help="Output image dimensions"
+    )
+    
+    output_format = st.selectbox(
+        "Output Format",
+        ["webp", "jpg", "png"],
+        index=0,
+        help="Image file format"
+    )
+    
+    output_quality = st.slider(
+        "Quality", 
+        min_value=1, 
+        max_value=100, 
+        value=80,
+        help="Higher = better quality, larger file"
+    )
 
     if st.button("🧠 Reset Memory", use_container_width=True):
         st.session_state.messages = []
@@ -103,9 +129,10 @@ current_system_prompt = (
     f"You are {display_name}, an advanced AI created by BotDevelopmentAI. "
     f"You are currently operating in '{selected_power}' mode. "
     "You generate images using SmartBot Ludy 2.0, powered by Nano Banana Pro "
-    "(Google's Gemini 2.5 Flash Image model). This is a state-of-the-art image generator "
-    "known for exceptional quality, perfect text rendering, and character consistency. "
-    "When asked to draw, create, generate images, pictures, art, etc., you use Ludy 2.0. "
+    "(Google's Gemini 2.5 Flash Image model - the #1 rated image generation model). "
+    "This model excels at: perfect text rendering, state-of-the-art visual quality, "
+    "prompt adherence, and image detail. When asked to draw, create, generate images, "
+    "pictures, art, etc., you use Ludy 2.0 with Nano Banana Pro. "
     "Stay in character. Be helpful, concise when appropriate, and maximally intelligent."
 )
 
@@ -126,48 +153,70 @@ with st.sidebar:
     st.caption(f"Active Identity: **{display_name}**")
 
 # ────────────────────────────────────────────────
-#  LUDY 2.0 – NANO BANANA PRO (TOGETHER AI)
+#  LUDY 2.0 – NANO BANANA PRO (VIA REPLICATE)
 # ────────────────────────────────────────────────
-def call_ludy_2_pro(prompt: str, width: int = 1024, height: int = 768, steps: int = 28):
+def call_ludy_2_nano_banana(
+    prompt: str, 
+    aspect_ratio: str = "1:1",
+    output_format: str = "webp",
+    output_quality: int = 80
+) -> bytes:
     """
-    Ludy 2.0 using genuine Nano Banana Pro via Together AI
-    Model: google/gemini-3-pro-image (Nano Banana Pro)
+    Ludy 2.0 using Google's Nano Banana Pro via Replicate
+    Model: google/nano-banana-pro
+    
+    Free tier: 50 images/month (no credit card!)
+    After free tier: $0.003-0.01 per image
     """
     try:
-        response = together_client.images.generate(
-            model="google/gemini-3-pro-image",
-            prompt=prompt,
-            width=width,
-            height=height,
-            steps=steps,
-            n=1
+        # Call the Nano Banana Pro model
+        output = replicate.run(
+            "google/nano-banana-pro",
+            input={
+                "prompt": prompt,
+                "aspect_ratio": aspect_ratio,
+                "output_format": output_format,
+                "output_quality": output_quality
+            }
         )
         
-        # Get the image URL
-        image_url = response.data[0].url
+        # Output is a URL to the generated image
+        image_url = output
         
         # Download the image
-        import requests
-        img_response = requests.get(image_url, timeout=30)
-        img_response.raise_for_status()
+        response = requests.get(image_url, timeout=30)
+        response.raise_for_status()
         
-        return img_response.content
+        return response.content
         
     except Exception as e:
-        error_msg = str(e)
-        # Handle rate limiting gracefully
-        if "rate limit" in error_msg.lower() or "quota" in error_msg.lower() or "429" in error_msg:
+        error_msg = str(e).lower()
+        
+        # Handle rate limiting
+        if "rate limit" in error_msg or "quota" in error_msg or "429" in error_msg:
             raise RuntimeError(
-                "🌙 Ludy 2.0 has reached its daily generation limit!\n\n"
-                "Free tier allows ~100 images/day. Limit resets in 24 hours.\n"
-                "Consider upgrading to Together AI's paid tier for unlimited access."
+                "🌙 **Ludy 2.0 Monthly Limit Reached!**\n\n"
+                "Free tier: 50 images/month\n"
+                "Resets: Next month\n\n"
+                "💡 **Options:**\n"
+                "1. Wait for monthly reset\n"
+                "2. Add payment: only $0.003-0.01 per image\n"
+                "3. Sign up for new Replicate account (free!)"
             )
-        elif "credit" in error_msg.lower():
+        
+        # Handle billing/payment required
+        if "billing" in error_msg or "payment" in error_msg or "credit" in error_msg:
             raise RuntimeError(
-                "💳 Together AI credits depleted.\n\n"
-                "Add credits at: https://api.together.xyz/settings/billing"
+                "💳 **Free Tier Exhausted**\n\n"
+                "You've used your 50 free images this month!\n\n"
+                "💰 **Super Cheap Option:**\n"
+                "Add payment method for $0.003-0.01/image\n"
+                "(That's ~100 images for $1!)\n\n"
+                "Add at: https://replicate.com/account/billing"
             )
-        raise RuntimeError(f"Ludy 2.0 (Nano Banana Pro) error: {error_msg}")
+        
+        # Generic error
+        raise RuntimeError(f"Ludy 2.0 (Nano Banana Pro) error: {str(e)}")
 
 # ────────────────────────────────────────────────
 #  CHAT HISTORY DISPLAY
@@ -191,59 +240,66 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy 2.0..
 
     with st.chat_message("assistant"):
         if is_image_request:
-            st.write(f"🌌 **Ludy 2.0** • Nano Banana Pro is creating your masterpiece...")
+            st.write(f"🌌 **Ludy 2.0** • Nano Banana Pro (#1 Model) is creating your masterpiece...")
             
             # Show generation settings
             with st.expander("🎨 Generation Details", expanded=False):
-                st.write(f"**Model:** Google Gemini 2.5 Flash Image (Nano Banana Pro)")
-                st.write(f"**Resolution:** {img_width}x{img_height}px")
-                st.write(f"**Quality Steps:** {img_steps}")
+                st.write(f"**Model:** Google Nano Banana Pro (Gemini 2.5 Flash Image)")
+                st.write(f"**Aspect Ratio:** {aspect_ratio}")
+                st.write(f"**Format:** {output_format.upper()}")
+                st.write(f"**Quality:** {output_quality}%")
+                st.write(f"**Powered by:** Replicate (FREE tier)")
             
             try:
-                image_data = call_ludy_2_pro(
+                image_data = call_ludy_2_nano_banana(
                     prompt=user_input,
-                    width=img_width,
-                    height=img_height,
-                    steps=img_steps
+                    aspect_ratio=aspect_ratio,
+                    output_format=output_format,
+                    output_quality=output_quality
                 )
+                
                 image = Image.open(io.BytesIO(image_data))
                 
                 # Display with enhanced caption
                 st.image(
                     image, 
-                    caption=f"✨ Ludy 2.0 · Nano Banana Pro · {img_width}x{img_height} · {display_name}",
+                    caption=f"✨ Ludy 2.0 · Nano Banana Pro · {aspect_ratio} · {display_name}",
                     use_column_width=True
                 )
                 
                 # Download button
-                st.download_button(
-                    label="⬇️ Save Image (PNG)",
-                    data=image_data,
-                    file_name="ludy_2_nano_banana_pro.png",
-                    mime="image/png",
-                    use_container_width=False
-                )
-                
-                st.success("✅ Image generated successfully with Nano Banana Pro!")
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.download_button(
+                        label=f"⬇️ Save Image ({output_format.upper()})",
+                        data=image_data,
+                        file_name=f"ludy_2_nano_banana.{output_format}",
+                        mime=f"image/{output_format}",
+                        use_container_width=True
+                    )
+                with col2:
+                    st.success("✅ Done!")
                 
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": f"Ludy 2.0 (Nano Banana Pro - Google Gemini) has created your image at {img_width}x{img_height}px. ({display_name})"
+                    "content": f"Ludy 2.0 (Nano Banana Pro - Google Gemini #1 Model) has created your image. ({display_name})"
                 })
                 
             except Exception as err:
                 st.error(str(err))
                 
                 # Helpful recovery suggestions
-                if "limit" in str(err).lower():
-                    st.info("💡 **What you can do:**\n"
-                           "1. Try again tomorrow when limits reset\n"
-                           "2. Upgrade to Together AI Pro ($20/month for unlimited)\n"
-                           "3. Get free $5 credits at: https://api.together.xyz")
-                elif "credit" in str(err).lower():
-                    st.info("💡 **Get more credits:**\n"
-                           "Add credits at: https://api.together.xyz/settings/billing\n"
-                           "New users get $5 free!")
+                if "limit" in str(err).lower() or "free tier" in str(err).lower():
+                    st.info("💡 **What you can do:**\n\n"
+                           "**Option 1 (FREE):** Create new Replicate account\n"
+                           "- Go to: https://replicate.com/signin\n"
+                           "- Get new API token\n"
+                           "- Add to secrets.toml\n"
+                           "- Get another 50 free images!\n\n"
+                           "**Option 2 (SUPER CHEAP):** Add payment\n"
+                           "- Only $0.003-0.01 per image\n"
+                           "- ~100 images for $1\n"
+                           "- Link: https://replicate.com/account/billing")
         
         else:
             # Regular chat response
