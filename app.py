@@ -162,7 +162,7 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
                 real_model_id = (
                     "llama-3.1-8b-instant" 
                     if selected_power == "flash" else 
-                    "llama-3.3-70b-versatile"   # change here if Groq renames/updates
+                    "openai/gpt-oss-120b"   # change here if Groq renames/updates
                 )
 
                 stream = client.chat.completions.create(
@@ -190,4 +190,5 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
 
             except Exception as e:
                 st.error(f"{display_name} encountered a problem: {str(e)}")
+
 
