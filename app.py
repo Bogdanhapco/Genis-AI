@@ -81,7 +81,7 @@ if mode == "Flash":
     real_model_id = "llama-3.1-8b-instant"
 else:
     selected_power = "pro"
-    display_name = "Genis Pro 2.0 70B"
+    display_name = "Genis Pro 2.1 120B"
     # Specific ID requested by user
     real_model_id = "openai/gpt-oss-120b"
 
@@ -151,12 +151,12 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
 
     with st.chat_message("assistant"):
         if is_image_request:
-            st.write(f"🌌 **SmartBot Ludy** is channeling your vision...")
+            st.write(f"🌌 **Ludy 1.2** is channeling your vision...")
             try:
                 image_data = call_ludy(user_input)
                 image = Image.open(io.BytesIO(image_data))
                 
-                st.image(image, caption=f"Artwork by SmartBot Ludy – {display_name}", use_column_width=True)
+                st.image(image, caption=f"Artwork by Ludy 1.2 – {display_name}", use_column_width=True)
                 
                 st.download_button(
                     label="⬇️ Save Image",
@@ -168,7 +168,7 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
                 
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": f"SmartBot Ludy has created your image. ({display_name})"
+                    "content": f"Ludy 1.2 has created your image. ({display_name})"
                 })
             except Exception as err:
                 st.error(f"Ludy encountered an issue: {str(err)}")
@@ -202,3 +202,4 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
 
             except Exception as e:
                 st.error(f"{display_name} encountered a problem: {str(e)}")
+
