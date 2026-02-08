@@ -1,7 +1,6 @@
 import streamlit as st
 from groq import Groq
-from google import genai
-from google.genai import types
+import requests
 import io
 from PIL import Image
 
@@ -41,15 +40,13 @@ st.caption("by BotDevelopmentAI")
 def get_clients():
     try:
         groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-        gemini_key = st.secrets["GEMINI_API_KEY"]
-        gemini_client = genai.Client(api_key=gemini_key)
-        return groq_client, gemini_client
-    except Exception as e:
-        st.error(f"Missing API keys: {str(e)}")
-        st.info("You need: GROQ_API_KEY and GEMINI_API_KEY")
+        hf_token = st.secrets["HF_TOKEN"]
+        return groq_client, hf_token
+    except Exception:
+        st.error("Missing API keys in Streamlit secrets (GROQ_API_KEY + HF_TOKEN)")
         st.stop()
 
-client, gemini_client = get_clients()
+client, HF_TOKEN = get_clients()
 
 # ────────────────────────────────────────────────
 #  SIDEBAR – MODE SELECTION
@@ -69,17 +66,6 @@ with st.sidebar:
         ],
         horizontal=True
     )
-    
-    st.divider()
-    st.subheader("🍌 Ludy 2.0 - Nano Banana")
-    st.success("✨ **Google Gemini 2.5 Flash Image**\n\n"
-              "🍌 Real Nano Banana!\n"
-              "🆓 FREE tier available\n"
-              "⚡ Lightning fast generation\n"
-              "🎯 State-of-the-art quality\n"
-              "📝 Perfect text rendering")
-    
-    st.caption("Powered by: Gemini 2.5 Flash Image")
 
     if st.button("🧠 Reset Memory", use_container_width=True):
         st.session_state.messages = []
@@ -100,24 +86,14 @@ else:
 current_system_prompt = (
     f"You are {display_name}, an advanced AI created by BotDevelopmentAI. "
     f"You are currently operating in '{selected_power}' mode. "
-    "You generate images using SmartBot Ludy 2.0, powered by Google's Nano Banana "
-    "(Gemini 2.5 Flash Image) - Google's state-of-the-art image generation model. "
-    "Nano Banana excels at: perfect text rendering, character consistency, scene logic, "
-    "multi-image blending, and natural language understanding. "
-    "When asked to draw, create, generate images, pictures, art, etc., you use Ludy 2.0 with Nano Banana. "
+    "You generate images using SmartBot Ludy when asked to draw, create, generate images, pictures, art, etc. "
     "Stay in character. Be helpful, concise when appropriate, and maximally intelligent."
 )
 
 if "messages" not in st.session_state:
-    st.session_state.messages = [{
-        "role": "system",
-        "content": current_system_prompt
-    }]
+    st.session_state.messages = [{"role": "system", "content": current_system_prompt}]
 elif not st.session_state.messages:
-    st.session_state.messages.append({
-        "role": "system",
-        "content": current_system_prompt
-    })
+    st.session_state.messages.append({"role": "system", "content": current_system_prompt})
 
 st.session_state.messages[0]["content"] = current_system_prompt
 
@@ -125,58 +101,28 @@ with st.sidebar:
     st.caption(f"Active Identity: **{display_name}**")
 
 # ────────────────────────────────────────────────
-#  LUDY 2.0 – NANO BANANA (REAL!)
+#  SMARTBOT LUDY – IMAGE GENERATION (FLUX DEV)
 # ────────────────────────────────────────────────
-def call_ludy_2_nano_banana(prompt: str) -> bytes:
-    """
-    Ludy 2.0 using REAL Nano Banana (Gemini 2.5 Flash Image)
-    
-    This is the actual model used in Gemini for image generation!
-    Free tier available with quotas.
-    """
+def call_ludy(prompt: str) -> bytes:
+    url = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-dev"
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+
+    payload = {
+        "inputs": prompt,
+        "parameters": {
+            "guidance_scale": 7.5,
+            "num_inference_steps": 30,
+            "width": 1024,
+            "height": 1024
+        }
+    }
+
     try:
-        # Call the REAL Nano Banana model
-        response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash-image",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE"]
-            )
-        )
-        
-        # Extract image from response
-        for part in response.candidates[0].content.parts:
-            if part.inline_data is not None:
-                return part.inline_data.data
-        
-        raise RuntimeError("No image generated in response")
-        
-    except Exception as e:
-        error_msg = str(e).lower()
-        
-        # Handle quota/rate limiting
-        if "quota" in error_msg or "limit" in error_msg or "429" in error_msg:
-            raise RuntimeError(
-                "🍌 **Nano Banana Daily Limit Reached!**\n\n"
-                "Free tier has daily quotas.\n"
-                "Limits reset daily.\n\n"
-                "💡 **Options:**\n"
-                "1. Wait for tomorrow's reset\n"
-                "2. Upgrade to Google AI Plus for higher quotas\n"
-                "3. Use Gemini web app (gemini.google.com) for free access"
-            )
-        
-        # Handle billing
-        if "billing" in error_msg or "payment" in error_msg:
-            raise RuntimeError(
-                "💳 **Enable Billing for API Access**\n\n"
-                "Nano Banana is free in Gemini web app,\n"
-                "but API may have different limits.\n\n"
-                "Try: gemini.google.com (free!)"
-            )
-        
-        # Generic error
-        raise RuntimeError(f"Nano Banana error: {str(e)[:300]}")
+        resp = requests.post(url, headers=headers, json=payload, timeout=90)
+        resp.raise_for_status()
+        return resp.content
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"Ludy failed: {str(e)}")
 
 # ────────────────────────────────────────────────
 #  CHAT HISTORY DISPLAY
@@ -189,9 +135,9 @@ for message in st.session_state.messages:
 # ────────────────────────────────────────────────
 #  CHAT INPUT + RESPONSE LOGIC
 # ────────────────────────────────────────────────
-if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy 2.0..."):
+if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
     st.session_state.messages.append({"role": "user", "content": user_input})
-    
+
     with st.chat_message("user"):
         st.markdown(user_input)
 
@@ -200,47 +146,32 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy 2.0..
 
     with st.chat_message("assistant"):
         if is_image_request:
-            st.write(f"🍌 **Ludy 2.0** • Nano Banana is creating your masterpiece...")
-            st.caption("💡 Powered by Google Gemini 2.5 Flash Image")
-            
+            st.write("🌌 **Ludy (FLUX Dev)** is crafting your photoreal image...")
             try:
-                with st.spinner("Generating with Nano Banana..."):
-                    image_data = call_ludy_2_nano_banana(user_input)
-                
+                image_data = call_ludy(user_input)
                 image = Image.open(io.BytesIO(image_data))
-                
-                st.image(
-                    image,
-                    caption=f"🍌 Ludy 2.0 · Nano Banana · {display_name}",
-                    use_column_width=True
-                )
-                
+
+                st.image(image, caption=f"Artwork by Ludy – {display_name}", use_column_width=True)
+
                 st.download_button(
-                    label="⬇️ Save Image (PNG)",
+                    label="⬇️ Save Image",
                     data=image_data,
-                    file_name="ludy_2_nano_banana.png",
+                    file_name="ludy_creation.png",
                     mime="image/png"
                 )
-                
-                st.success("✅ Generated with Nano Banana (Gemini 2.5 Flash Image)!")
-                
+
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": f"Ludy 2.0 (Nano Banana - Google Gemini 2.5 Flash Image) has created your image. ({display_name})"
+                    "content": f"Ludy has created your image. ({display_name})"
                 })
-                
+
             except Exception as err:
-                st.error(str(err))
-                
-                if "limit" in str(err).lower():
-                    st.info("💡 **Alternative:**\n"
-                           "Visit gemini.google.com and select '🍌Create images' for FREE unlimited access!")
-        
+                st.error(f"Ludy encountered an issue: {str(err)}")
+
         else:
-            # Regular chat
             try:
                 st.caption(f"{display_name} is thinking...")
-                
+
                 stream = client.chat.completions.create(
                     model=real_model_id,
                     messages=[{"role": m["role"], "content": m["content"]} 
@@ -258,24 +189,11 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy 2.0..
                         placeholder.markdown(full_response + "▌")
 
                 placeholder.markdown(full_response)
-                
+
                 st.session_state.messages.append({
-                    "role": "assistant", 
+                    "role": "assistant",
                     "content": full_response
                 })
 
             except Exception as e:
                 st.error(f"{display_name} encountered a problem: {str(e)}")
-
-# ────────────────────────────────────────────────
-#  FOOTER
-# ────────────────────────────────────────────────
-st.markdown("---")
-st.markdown("""
-<div style='text-align: center; opacity: 0.7;'>
-<small>
-🍌 <strong>Ludy 2.0</strong> powered by <strong>Nano Banana</strong> (Google Gemini 2.5 Flash Image)<br>
-✨ State-of-the-art image generation · Perfect text rendering · Character consistency
-</small>
-</div>
-""", unsafe_allow_html=True)
