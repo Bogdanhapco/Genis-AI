@@ -49,7 +49,7 @@ def get_clients():
 client, HF_TOKEN = get_clients()
 
 # ────────────────────────────────────────────────
-#  SIDEBAR – MODE SELECTION (only branding shown)
+#  SIDEBAR – MODE SELECTION
 # ────────────────────────────────────────────────
 with st.sidebar:
     st.header("🌌 Genis Control")
@@ -67,35 +67,55 @@ with st.sidebar:
         horizontal=True
     )
 
-    if mode == "Flash":
-        selected_power = "flash"
-        display_name = "Genis Flash 1.2 8B"
-    else:
-        selected_power = "pro"
-        display_name = "Genis Pro 2.0 70B"
-
-    st.caption(f"Active: **{display_name}**")
-
     if st.button("🧠 Reset Memory", use_container_width=True):
-        if "messages" in st.session_state:
-            st.session_state.messages = st.session_state.messages[:1]
+        st.session_state.messages = []  # Clear history
         st.rerun()
 
 # ────────────────────────────────────────────────
-#  SYSTEM PROMPT – pure branding
+#  IDENTITY & MODEL LOGIC (The Fix)
 # ────────────────────────────────────────────────
+
+if mode == "Flash":
+    selected_power = "flash"
+    display_name = "Genis Flash 1.2 8B"
+    real_model_id = "llama-3.1-8b-instant"
+else:
+    selected_power = "pro"
+    display_name = "Genis Pro 2.0 70B"
+    # Specific ID requested by user
+    real_model_id = "openai/gpt-oss-120b"
+
+# 1. Define the System Prompt based on current mode
+current_system_prompt = (
+    f"You are {display_name}, an advanced AI created by BotDevelopmentAI. "
+    f"You are currently operating in '{selected_power}' mode. "
+    "You generate images using SmartBot Ludy when asked to draw, create, generate images, pictures, art, etc. "
+    "Stay in character. Be helpful, concise when appropriate, and maximally intelligent."
+)
+
+# 2. Initialize or Update History
 if "messages" not in st.session_state:
     st.session_state.messages = [{
         "role": "system",
-        "content": (
-            f"You are {display_name}, an advanced AI created by BotDevelopmentAI. "
-            "You generate images using SmartBot Ludy when asked to draw, create, generate images, pictures, art, etc. "
-            "Stay in character. Be helpful, concise when appropriate, and maximally intelligent."
-        )
+        "content": current_system_prompt
     }]
+elif not st.session_state.messages:
+    # Handle empty list case if needed
+    st.session_state.messages.append({
+        "role": "system",
+        "content": current_system_prompt
+    })
+
+# 3. FORCE UPDATE the system prompt (Index 0)
+# This ensures the model knows who it is immediately when you toggle the switch
+st.session_state.messages[0]["content"] = current_system_prompt
+
+# Show active identity in sidebar
+with st.sidebar:
+    st.caption(f"Active Identity: **{display_name}**")
 
 # ────────────────────────────────────────────────
-#  SMARTBOT LUDY – image generation
+#  SMARTBOT LUDY – IMAGE GENERATION
 # ────────────────────────────────────────────────
 def call_ludy(prompt: str) -> bytes:
     url = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
@@ -154,17 +174,9 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
                 st.error(f"Ludy encountered an issue: {str(err)}")
         
         else:
-            # Text response – real model hidden
             try:
                 st.caption(f"{display_name} is thinking...")
                 
-                # ── REAL MODEL MAPPING (never shown to user) ──
-                real_model_id = (
-                    "llama-3.1-8b-instant" 
-                    if selected_power == "flash" else 
-                    "openai/gpt-oss-120b"   # change here if Groq renames/updates
-                )
-
                 stream = client.chat.completions.create(
                     model=real_model_id,
                     messages=[{"role": m["role"], "content": m["content"]} 
@@ -190,5 +202,3 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
 
             except Exception as e:
                 st.error(f"{display_name} encountered a problem: {str(e)}")
-
-
