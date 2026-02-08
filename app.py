@@ -1,8 +1,9 @@
 import streamlit as st
 from groq import Groq
-import google.generativeai as genai
-from PIL import Image
+from google import genai
+from google.genai import types
 import io
+from PIL import Image
 
 # ────────────────────────────────────────────────
 #  PAGE CONFIG & COSMIC STYLE
@@ -41,17 +42,14 @@ def get_clients():
     try:
         groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         gemini_key = st.secrets["GEMINI_API_KEY"]
-        
-        # Configure Gemini
-        genai.configure(api_key=gemini_key)
-        
-        return groq_client, gemini_key
+        gemini_client = genai.Client(api_key=gemini_key)
+        return groq_client, gemini_client
     except Exception as e:
-        st.error(f"Missing API keys in Streamlit secrets: {str(e)}")
+        st.error(f"Missing API keys: {str(e)}")
         st.info("You need: GROQ_API_KEY and GEMINI_API_KEY")
         st.stop()
 
-client, GEMINI_KEY = get_clients()
+client, gemini_client = get_clients()
 
 # ────────────────────────────────────────────────
 #  SIDEBAR – MODE SELECTION
@@ -73,39 +71,42 @@ with st.sidebar:
     )
     
     st.divider()
-    st.subheader("🎨 Ludy 2.0 - Nano Banana")
-    st.success("✨ **Google Gemini Image Gen**\n\n"
-              "🏆 Real Nano Banana & Pro!\n"
-              "🆓 500-1,500 images/day FREE\n"
-              "💳 No credit card needed\n"
-              "⚡ Super fast generation\n"
-              "🎯 State-of-the-art quality")
+    st.subheader("🎨 Ludy 2.0")
+    st.success("✨ **Google Gemini/Imagen**\n\n"
+              "🆓 Gemini Flash - FREE!\n"
+              "💎 Imagen - $0.02/image\n"
+              "🏆 State-of-the-art quality")
     
     # Model selection
     st.subheader("Image Model")
     image_model = st.selectbox(
-        "Nano Banana Model",
+        "Choose Model",
         [
-            "gemini-2.5-flash-image-preview",  # Nano Banana (500/day free)
-            "gemini-3-pro-preview"              # Nano Banana Pro (limited free)
+            "gemini-2.0-flash-exp",           # FREE - Flash with image gen
+            "imagen-4.0-fast-generate-001",   # $0.02 per image
+            "imagen-4.0-generate-001"         # $0.03 per image
         ],
         index=0,
         format_func=lambda x: {
-            "gemini-2.5-flash-image-preview": "🏆 Nano Banana (2.5 Flash) - 500/day FREE",
-            "gemini-3-pro-preview": "💎 Nano Banana Pro (3.0) - Premium"
+            "gemini-2.0-flash-exp": "🆓 Gemini Flash - FREE (with text output)",
+            "imagen-4.0-fast-generate-001": "⚡ Imagen 4 Fast - $0.02/img",
+            "imagen-4.0-generate-001": "💎 Imagen 4 - $0.03/img (best quality)"
         }.get(x, x)
     )
     
-    # Image settings
-    st.subheader("Image Settings")
-    aspect_ratio = st.selectbox(
-        "Aspect Ratio",
-        ["1:1", "16:9", "9:16", "4:3", "3:4"],
-        index=0
-    )
+    # Settings based on model type
+    is_gemini = "gemini" in image_model
     
-    st.caption(f"**Active Model:** {image_model.split('-')[0].title()} Image")
-    st.caption(f"**Daily Limit:** {'500+ free' if '2.5' in image_model else '100 free'}")
+    if not is_gemini:  # Imagen models
+        st.subheader("Image Settings")
+        aspect_ratio = st.selectbox(
+            "Aspect Ratio",
+            ["1:1", "16:9", "9:16", "4:3", "3:4"],
+            index=0
+        )
+        num_images = st.slider("Number of Images", 1, 4, 1)
+    
+    st.caption(f"**Active:** {image_model.split('-')[0].title()}")
 
     if st.button("🧠 Reset Memory", use_container_width=True):
         st.session_state.messages = []
@@ -126,9 +127,9 @@ else:
 current_system_prompt = (
     f"You are {display_name}, an advanced AI created by BotDevelopmentAI. "
     f"You are currently operating in '{selected_power}' mode. "
-    "You generate images using SmartBot Ludy 2.0, powered by Google's Gemini Image API. "
-    "You have access to real 'Nano Banana' models (Gemini 2.5 Flash Image and Gemini 3 Pro Image). "
-    "These are Google's state-of-the-art image generation models with 500-1,500 FREE images per day! "
+    "You generate images using SmartBot Ludy 2.0, powered by Google's Gemini and Imagen models. "
+    "You have access to: Gemini Flash (FREE with image generation), Imagen 4 Fast ($0.02/image), "
+    "and Imagen 4 ($0.03/image for best quality). "
     "When asked to draw, create, generate images, pictures, art, etc., you use Ludy 2.0. "
     "Stay in character. Be helpful, concise when appropriate, and maximally intelligent."
 )
@@ -150,93 +151,88 @@ with st.sidebar:
     st.caption(f"Active Identity: **{display_name}**")
 
 # ────────────────────────────────────────────────
-#  LUDY 2.0 – GOOGLE GEMINI NANO BANANA
+#  LUDY 2.0 – GOOGLE GEMINI/IMAGEN
 # ────────────────────────────────────────────────
-def call_ludy_2_gemini(
-    prompt: str,
-    model_name: str = "gemini-2.5-flash-image-preview",
-    aspect_ratio: str = "1:1"
-) -> bytes:
+def call_ludy_2_gemini_flash(prompt: str) -> bytes:
     """
-    Ludy 2.0 using Google's Gemini API with REAL Nano Banana models!
-    
-    Free tier: 500-1,500 images/day (no credit card!)
-    Models:
-    - gemini-2.5-flash-image-preview (Nano Banana) - 500/day
-    - gemini-3-pro-preview (Nano Banana Pro) - limited
+    Use Gemini Flash with image generation - 100% FREE!
+    Note: This also generates text along with the image
     """
     try:
-        # Get the Gemini image model
-        model = genai.GenerativeModel(model_name)
-        
-        # Map aspect ratios to dimensions
-        dimensions_map = {
-            "1:1": (1024, 1024),
-            "16:9": (1024, 576),
-            "9:16": (576, 1024),
-            "4:3": (1024, 768),
-            "3:4": (768, 1024)
-        }
-        width, height = dimensions_map.get(aspect_ratio, (1024, 1024))
-        
-        # Generate image
-        response = model.generate_content(
-            prompt,
-            generation_config={
-                "temperature": 0.7,
-                "top_p": 0.95,
-            }
+        response = gemini_client.models.generate_content(
+            model="gemini-2.0-flash-exp",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=['Text', 'Image']
+            )
         )
         
         # Extract image from response
-        # Gemini returns image in response.parts
-        if hasattr(response, 'parts') and response.parts:
-            for part in response.parts:
-                if hasattr(part, 'inline_data') and part.inline_data:
-                    # Get image bytes
-                    image_data = part.inline_data.data
-                    return image_data
+        for part in response.candidates[0].content.parts:
+            if part.inline_data is not None:
+                return part.inline_data.data
         
-        # If no image in parts, try text response with error
-        if hasattr(response, 'text'):
-            raise RuntimeError(f"No image generated. Response: {response.text[:200]}")
+        raise RuntimeError("No image generated in response")
         
-        raise RuntimeError("No image data in response")
+    except Exception as e:
+        raise RuntimeError(f"Gemini Flash error: {str(e)[:300]}")
+
+def call_ludy_2_imagen(
+    prompt: str, 
+    model: str = "imagen-4.0-fast-generate-001",
+    aspect_ratio: str = "1:1",
+    num_images: int = 1
+) -> list:
+    """
+    Use Imagen models - Paid but cheap ($0.02-0.03/image)
+    Returns list of image bytes
+    """
+    try:
+        # Map aspect ratios
+        aspect_map = {
+            "1:1": "1:1",
+            "16:9": "16:9",
+            "9:16": "9:16",
+            "4:3": "4:3",
+            "3:4": "3:4"
+        }
+        
+        response = gemini_client.models.generate_images(
+            model=model,
+            prompt=prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=num_images,
+                aspect_ratio=aspect_map.get(aspect_ratio, "1:1")
+            )
+        )
+        
+        # Extract images
+        images = []
+        for image_part in response.generated_images:
+            if hasattr(image_part, 'image') and image_part.image:
+                # Convert PIL image to bytes
+                img_byte_arr = io.BytesIO()
+                image_part.image.save(img_byte_arr, format='PNG')
+                img_byte_arr.seek(0)
+                images.append(img_byte_arr.getvalue())
+        
+        if not images:
+            raise RuntimeError("No images generated")
+        
+        return images
         
     except Exception as e:
         error_msg = str(e).lower()
         
-        # Handle rate limiting
-        if "quota" in error_msg or "limit" in error_msg or "429" in error_msg:
+        if "quota" in error_msg or "limit" in error_msg:
             raise RuntimeError(
-                "🌙 **Daily Limit Reached!**\n\n"
-                "Free tier limits:\n"
-                "• Gemini 2.5 Flash Image: 500 images/day\n"
-                "• Gemini 3 Pro: 100 images/day\n\n"
-                "💡 **Resets:** Tomorrow at midnight UTC\n"
-                "💰 **Upgrade:** Only $0.039 per image after free tier"
-            )
-        
-        # Handle billing
-        if "billing" in error_msg or "payment" in error_msg:
-            raise RuntimeError(
-                "💳 **Enable Billing for Higher Limits**\n\n"
-                "Current: 500 free/day\n"
-                "With billing: Only $0.039/image\n\n"
+                "💳 **Billing Required**\n\n"
+                "Imagen models require enabled billing.\n"
+                "Cost: $0.02-0.03 per image (very cheap!)\n\n"
                 "Enable at: https://console.cloud.google.com/billing"
             )
         
-        # Handle model errors
-        if "model" in error_msg or "not found" in error_msg:
-            raise RuntimeError(
-                f"⚠️ **Model Error**\n\n"
-                f"Model '{model_name}' may not be available.\n"
-                f"Try switching models in the sidebar.\n\n"
-                f"Details: {str(e)[:200]}"
-            )
-        
-        # Generic error
-        raise RuntimeError(f"Ludy 2.0 (Gemini Nano Banana) error: {str(e)[:300]}")
+        raise RuntimeError(f"Imagen error: {str(e)[:300]}")
 
 # ────────────────────────────────────────────────
 #  CHAT HISTORY DISPLAY
@@ -260,66 +256,71 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy 2.0..
 
     with st.chat_message("assistant"):
         if is_image_request:
-            model_display_name = {
-                "gemini-2.5-flash-image-preview": "Nano Banana (Gemini 2.5 Flash)",
-                "gemini-3-pro-preview": "Nano Banana Pro (Gemini 3)"
+            model_display = {
+                "gemini-2.0-flash-exp": "Gemini Flash (FREE)",
+                "imagen-4.0-fast-generate-001": "Imagen 4 Fast ($0.02)",
+                "imagen-4.0-generate-001": "Imagen 4 ($0.03)"
             }.get(image_model, image_model)
             
-            st.write(f"🌌 **Ludy 2.0** • {model_display_name} is creating your masterpiece...")
-            st.caption("💡 Powered by Google Gemini - 100% FREE tier!")
-            
-            # Show generation details
-            with st.expander("🎨 Generation Details", expanded=False):
-                st.write(f"**Model:** {model_display_name}")
-                st.write(f"**Aspect Ratio:** {aspect_ratio}")
-                st.write(f"**Provider:** Google Gemini API")
-                st.write(f"**Daily Free Limit:** {'500+' if '2.5' in image_model else '100'} images")
-                st.write(f"**Cost After Free:** $0.039 per image")
+            st.write(f"🌌 **Ludy 2.0** • {model_display} is creating...")
             
             try:
-                image_data = call_ludy_2_gemini(
-                    prompt=user_input,
-                    model_name=image_model,
-                    aspect_ratio=aspect_ratio
-                )
-                
-                image = Image.open(io.BytesIO(image_data))
-                
-                st.image(
-                    image,
-                    caption=f"✨ Ludy 2.0 · {model_display_name} · {aspect_ratio} · {display_name}",
-                    use_column_width=True
-                )
-                
-                col1, col2 = st.columns([3, 1])
-                with col1:
+                if "gemini" in image_model:
+                    # Gemini Flash - FREE!
+                    image_data = call_ludy_2_gemini_flash(user_input)
+                    image = Image.open(io.BytesIO(image_data))
+                    
+                    st.image(image, caption=f"✨ Ludy 2.0 · {model_display} · {display_name}", use_column_width=True)
+                    
                     st.download_button(
                         label="⬇️ Save Image (PNG)",
                         data=image_data,
-                        file_name=f"ludy_2_nano_banana_{aspect_ratio.replace(':', 'x')}.png",
-                        mime="image/png",
-                        use_container_width=True
+                        file_name="ludy_2_gemini_flash.png",
+                        mime="image/png"
                     )
-                with col2:
-                    st.success("✅ Done!")
+                    
+                    st.success(f"✅ Generated FREE with Gemini Flash!")
+                    
+                else:
+                    # Imagen - Paid but cheap
+                    images = call_ludy_2_imagen(
+                        user_input,
+                        model=image_model,
+                        aspect_ratio=aspect_ratio,
+                        num_images=num_images
+                    )
+                    
+                    for idx, img_data in enumerate(images):
+                        image = Image.open(io.BytesIO(img_data))
+                        
+                        st.image(image, caption=f"✨ Ludy 2.0 · {model_display} · Image {idx+1}/{len(images)}", use_column_width=True)
+                        
+                        st.download_button(
+                            label=f"⬇️ Save Image {idx+1}",
+                            data=img_data,
+                            file_name=f"ludy_2_imagen_{idx+1}.png",
+                            mime="image/png",
+                            key=f"download_{idx}"
+                        )
+                    
+                    cost = 0.02 if "fast" in image_model else 0.03
+                    total_cost = cost * len(images)
+                    st.info(f"💰 Cost: ${total_cost:.2f} ({len(images)} image{'s' if len(images) > 1 else ''} × ${cost})")
                 
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": f"Ludy 2.0 ({model_display_name} - Google Gemini) has created your image at {aspect_ratio}. ({display_name})"
+                    "content": f"Ludy 2.0 ({model_display}) has created your image. ({display_name})"
                 })
                 
             except Exception as err:
                 st.error(str(err))
                 
-                # Helpful tips
-                if "limit" in str(err).lower():
-                    st.info("💡 **Tips:**\n\n"
-                           "1. Try again tomorrow when limits reset\n"
-                           "2. Switch to the other Nano Banana model\n"
-                           "3. Enable billing for only $0.039/image")
+                if "billing" in str(err).lower():
+                    st.info("💡 **Try FREE option:**\n"
+                           "Switch to 'Gemini Flash' in sidebar for FREE image generation!")
         
         else:
-            # Regular chat response
+            # Regular chat
             try:
                 st.caption(f"{display_name} is thinking...")
                 
@@ -350,15 +351,14 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy 2.0..
                 st.error(f"{display_name} encountered a problem: {str(e)}")
 
 # ────────────────────────────────────────────────
-#  FOOTER INFO
+#  FOOTER
 # ────────────────────────────────────────────────
 st.markdown("---")
-st.markdown(f"""
+st.markdown("""
 <div style='text-align: center; opacity: 0.7;'>
 <small>
-🎨 <strong>Ludy 2.0</strong> powered by <strong>Google Gemini Nano Banana</strong><br>
-✨ 500-1,500 FREE images/day • No credit card required<br>
-🏆 State-of-the-art quality • Real Nano Banana Pro models
+🎨 <strong>Ludy 2.0</strong> powered by <strong>Google Gemini & Imagen</strong><br>
+✨ Gemini Flash: FREE • Imagen 4 Fast: $0.02/image • Imagen 4: $0.03/image
 </small>
 </div>
 """, unsafe_allow_html=True)
