@@ -50,6 +50,12 @@ def get_clients():
 client, HF_TOKEN = get_clients()
 
 # ────────────────────────────────────────────────
+#  SESSION STATE INITIALIZATION
+# ────────────────────────────────────────────────
+if "clear_image" not in st.session_state:
+    st.session_state.clear_image = False
+
+# ────────────────────────────────────────────────
 #  HELPER: Convert Image to Base64
 # ────────────────────────────────────────────────
 def image_to_base64(image):
@@ -81,16 +87,23 @@ with st.sidebar:
     
     # Image Upload Section
     st.subheader("📸 Vision Upload")
+    
+    # Clear the uploader if flag is set
+    if st.session_state.clear_image:
+        st.session_state.clear_image = False
+        st.rerun()
+    
     uploaded_image = st.file_uploader(
         "Upload an image for Genis to analyze",
         type=["png", "jpg", "jpeg", "webp"],
-        help="Upload an image and ask questions about it"
+        help="Upload an image and ask questions about it",
+        key="image_uploader"
     )
     
     if uploaded_image:
         st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
         if st.button("🗑️ Clear Image", use_container_width=True):
-            uploaded_image = None
+            st.session_state.clear_image = True
             st.rerun()
     
     st.divider()
@@ -173,11 +186,13 @@ for message in st.session_state.messages:
 if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
     
     message_content = user_input
+    image_was_uploaded = False
     
     # If image is uploaded and Pro mode is active, include it
     if uploaded_image and supports_vision:
         image = Image.open(uploaded_image)
         base64_image = image_to_base64(image)
+        image_was_uploaded = True
         
         message_content = [
             {
@@ -196,11 +211,11 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
     
     with st.chat_message("user"):
         st.markdown(user_input)
-        if uploaded_image and supports_vision:
+        if image_was_uploaded:
             st.image(uploaded_image, width=300)
 
     image_triggers = ["draw", "image", "generate", "picture", "photo", "paint", "art", "create image", "make me"]
-    is_image_request = any(word in user_input.lower() for word in image_triggers) and not uploaded_image
+    is_image_request = any(word in user_input.lower() for word in image_triggers) and not image_was_uploaded
 
     with st.chat_message("assistant"):
         if is_image_request:
@@ -267,3 +282,8 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
 
             except Exception as e:
                 st.error(f"{display_name} encountered a problem: {str(e)}")
+    
+    # Auto-clear image after message is sent and processed
+    if image_was_uploaded:
+        st.session_state.clear_image = True
+        st.rerun()
