@@ -126,7 +126,7 @@ if mode == "Flash":
     supports_vision = False
 else:
     selected_power = "pro"
-    display_name = "Genis Pro 2.2 137B"
+    display_name = "Genis Pro 2.1 120B"
     real_model_id = "openai/gpt-oss-120b"  # Keep the big 120B model for text!
     vision_model_id = "meta-llama/llama-4-maverick-17b-128e-instruct"  # Use Maverick only for vision
     supports_vision = True
@@ -223,6 +223,9 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
     )
     st.session_state.messages.append({"role": "system", "content": system_reinforcement})
     
+    # After adding the message, remove the system reinforcement from being sent to avoid clutter
+    # We'll filter it out when preparing API messages
+    
     with st.chat_message("user"):
         st.markdown(user_input)
         if image_was_uploaded:
@@ -260,7 +263,7 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
                 st.caption(f"{display_name} is thinking...")
                 
                 # Choose model based on whether image is present in CURRENT message
-                current_has_image = uploaded_image and supports_vision
+                current_has_image = image_was_uploaded
                 if current_has_image:
                     # Use vision model when image is uploaded
                     model_to_use = vision_model_id
@@ -270,19 +273,37 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
                 
                 # Prepare messages for API call
                 api_messages = []
-                for m in st.session_state.messages:
-                    # Convert multimodal messages to text-only for GPT-OSS 120B
-                    if isinstance(m["content"], list) and not current_has_image:
-                        # Extract just the text from multimodal messages
-                        text_content = ""
-                        for content in m["content"]:
-                            if content.get("type") == "text":
-                                text_content = content["text"]
-                                break
-                        api_messages.append({"role": m["role"], "content": text_content})
-                    else:
-                        # Keep as-is for vision model or text-only messages
+                
+                # Always include the initial system prompt
+                api_messages.append(st.session_state.messages[0])
+                
+                # If current message has image, only send recent context to avoid confusion
+                if current_has_image:
+                    # Send only the last 10 messages + current message to vision model
+                    # This prevents old image data from interfering
+                    recent_messages = st.session_state.messages[-11:] if len(st.session_state.messages) > 11 else st.session_state.messages[1:]
+                    for m in recent_messages:
+                        # Skip system reinforcement messages
+                        if m["role"] == "system" and "Remember: You are" in m["content"]:
+                            continue
                         api_messages.append({"role": m["role"], "content": m["content"]})
+                else:
+                    # For text-only, send all messages but convert multimodal to text
+                    for m in st.session_state.messages[1:]:
+                        # Skip system reinforcement messages  
+                        if m["role"] == "system" and "Remember: You are" in m["content"]:
+                            continue
+                        # Convert multimodal messages to text-only for GPT-OSS 120B
+                        if isinstance(m["content"], list):
+                            # Extract just the text from multimodal messages
+                            text_content = ""
+                            for content in m["content"]:
+                                if content.get("type") == "text":
+                                    text_content = content["text"]
+                                    break
+                            api_messages.append({"role": m["role"], "content": text_content})
+                        else:
+                            api_messages.append({"role": m["role"], "content": m["content"]})
                 
                 stream = client.chat.completions.create(
                     model=model_to_use,
