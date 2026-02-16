@@ -54,6 +54,8 @@ client, HF_TOKEN = get_clients()
 # ────────────────────────────────────────────────
 if "clear_image" not in st.session_state:
     st.session_state.clear_image = False
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = 0
 
 # ────────────────────────────────────────────────
 #  HELPER: Convert Image to Base64
@@ -91,13 +93,13 @@ with st.sidebar:
     # Clear the uploader if flag is set
     if st.session_state.clear_image:
         st.session_state.clear_image = False
-        st.rerun()
+        st.session_state.uploader_key += 1  # Change key to reset uploader
     
     uploaded_image = st.file_uploader(
         "Upload an image for Genis to analyze",
         type=["png", "jpg", "jpeg", "webp"],
         help="Upload an image and ask questions about it",
-        key="image_uploader"
+        key=f"image_uploader_{st.session_state.uploader_key}"
     )
     
     if uploaded_image:
@@ -245,8 +247,9 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
             try:
                 st.caption(f"{display_name} is thinking...")
                 
-                # Choose model based on whether image is present
-                if uploaded_image and supports_vision:
+                # Choose model based on whether image is present in CURRENT message
+                current_has_image = uploaded_image and supports_vision
+                if current_has_image:
                     # Use vision model when image is uploaded
                     model_to_use = vision_model_id
                 else:
@@ -256,7 +259,18 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
                 # Prepare messages for API call
                 api_messages = []
                 for m in st.session_state.messages:
-                    api_messages.append({"role": m["role"], "content": m["content"]})
+                    # Convert multimodal messages to text-only for GPT-OSS 120B
+                    if isinstance(m["content"], list) and not current_has_image:
+                        # Extract just the text from multimodal messages
+                        text_content = ""
+                        for content in m["content"]:
+                            if content.get("type") == "text":
+                                text_content = content["text"]
+                                break
+                        api_messages.append({"role": m["role"], "content": text_content})
+                    else:
+                        # Keep as-is for vision model or text-only messages
+                        api_messages.append({"role": m["role"], "content": m["content"]})
                 
                 stream = client.chat.completions.create(
                     model=model_to_use,
