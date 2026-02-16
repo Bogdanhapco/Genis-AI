@@ -111,7 +111,7 @@ if mode == "Flash":
 else:
     selected_power = "pro"
     display_name = "Genis Pro 2.1 120B"
-    real_model_id = "llama-3.2-90b-vision-preview"  # Vision-capable model
+    real_model_id = "meta-llama/llama-4-scout-17b-16e-instruct"  # Llama 4 Scout with vision
     supports_vision = True
 
 current_system_prompt = (
