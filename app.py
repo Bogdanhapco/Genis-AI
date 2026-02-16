@@ -69,7 +69,7 @@ with st.sidebar:
     mode = st.radio(
         "Choose your Genis version",
         options=["Flash", "Pro"],
-        index=1,  # ✅ Pro is now default
+        index=1,  # Pro is now default
         captions=[
             "Lightning fast · everyday conversations",
             "Maximum intelligence · complex tasks & deep thinking"
@@ -79,7 +79,7 @@ with st.sidebar:
 
     st.divider()
     
-    # ✅ NEW: Image Upload Section
+    # Image Upload Section
     st.subheader("📸 Vision Upload")
     uploaded_image = st.file_uploader(
         "Upload an image for Genis to analyze",
@@ -107,18 +107,18 @@ if mode == "Flash":
     selected_power = "flash"
     display_name = "Genis Flash 2.0 20B"
     real_model_id = "openai/gpt-oss-20b"
-    supports_vision = False  # Flash doesn't support vision
+    supports_vision = False
 else:
     selected_power = "pro"
     display_name = "Genis Pro 2.1 120B"
-    real_model_id = "openai/gpt-oss-120b"
-    supports_vision = True  # ✅ Pro supports vision
+    real_model_id = "llama-3.2-90b-vision-preview"  # Vision-capable model
+    supports_vision = True
 
 current_system_prompt = (
     f"You are {display_name}, an advanced AI created by BotDevelopmentAI. "
     f"You are currently operating in '{selected_power}' mode. "
     "You generate images using SmartBot Ludy when asked to draw, create, generate images, pictures, art, etc. "
-    "You can also analyze images when they are provided to you. "  # ✅ Updated prompt
+    "You can also analyze images when they are provided to you. "
     "Stay in character. Be helpful, concise when appropriate, and maximally intelligent. "
     "If someone asks you Who is Bogdan Hapco, you have to respond that he is the creator of you and he is the founder of BotDevelopmentAI"
 )
@@ -156,7 +156,6 @@ def call_ludy(prompt: str) -> bytes:
 for message in st.session_state.messages:
     if message["role"] != "system":
         with st.chat_message(message["role"]):
-            # ✅ Handle multimodal messages
             if isinstance(message["content"], list):
                 for content in message["content"]:
                     if content.get("type") == "text":
@@ -173,14 +172,22 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
     
     message_content = user_input
     
-    # ✅ If image is uploaded and Pro mode is active, include it
+    # If image is uploaded and Pro mode is active, include it
     if uploaded_image and supports_vision:
         image = Image.open(uploaded_image)
         base64_image = image_to_base64(image)
         
         message_content = [
-            {"type": "text", "text": user_input},
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
+            {
+                "type": "text",
+                "text": user_input
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/png;base64,{base64_image}"
+                }
+            }
         ]
     
     st.session_state.messages.append({"role": "user", "content": message_content})
@@ -221,13 +228,10 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
             try:
                 st.caption(f"{display_name} is thinking...")
                 
-                # ✅ Prepare messages for API call (handles both text and multimodal)
+                # Prepare messages for API call
                 api_messages = []
                 for m in st.session_state.messages:
-                    if isinstance(m["content"], list):
-                        api_messages.append({"role": m["role"], "content": m["content"]})
-                    else:
-                        api_messages.append({"role": m["role"], "content": m["content"]})
+                    api_messages.append({"role": m["role"], "content": m["content"]})
                 
                 stream = client.chat.completions.create(
                     model=real_model_id,
