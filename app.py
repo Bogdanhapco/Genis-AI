@@ -8,7 +8,7 @@ import base64
 # ────────────────────────────────────────────────
 #  PAGE CONFIG & COSMIC STYLE
 # ────────────────────────────────────────────────
-st.set_page_config(page_title="Genis Pro", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="Genis Pro", page_icon="🚀", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
     <style>
@@ -77,7 +77,7 @@ with st.sidebar:
     mode = st.radio(
         "Choose your Genis version",
         options=["Flash", "Pro"],
-        index=1,  # Pro is now default
+        index=0,  # Flash is now default
         captions=[
             "Lightning fast · everyday conversations",
             "Maximum intelligence · complex tasks & deep thinking"
@@ -120,13 +120,13 @@ with st.sidebar:
 
 if mode == "Flash":
     selected_power = "flash"
-    display_name = "Genis Flash 2.0 20B"
-    real_model_id = "openai/gpt-oss-20b"
+    display_name = "Genis Flash 2.0 8B"
+    real_model_id = "llama-3.1-8b-instant"  # Llama 3.1 8B Instant
     vision_model_id = None
     supports_vision = False
 else:
     selected_power = "pro"
-    display_name = "Genis Pro 2.1 120B"
+    display_name = "Genis Pro 2.2 137B"
     real_model_id = "openai/gpt-oss-120b"  # Keep the big 120B model for text!
     vision_model_id = "meta-llama/llama-4-maverick-17b-128e-instruct"  # Use Maverick only for vision
     supports_vision = True
@@ -187,6 +187,11 @@ for message in st.session_state.messages:
 # ────────────────────────────────────────────────
 if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
     
+    # Check if user is trying to send an image with Flash model
+    if uploaded_image and not supports_vision:
+        st.error("⚠️ **Flash mode doesn't support image analysis!** Please switch to **Pro mode** in the sidebar to analyze images.")
+        st.stop()
+    
     message_content = user_input
     image_was_uploaded = False
     
@@ -210,6 +215,13 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
         ]
     
     st.session_state.messages.append({"role": "user", "content": message_content})
+    
+    # Add system prompt reinforcement after user message to maintain identity
+    system_reinforcement = (
+        f"Remember: You are {display_name}, created by BotDevelopmentAI. "
+        f"You are in '{selected_power}' mode. Stay in character."
+    )
+    st.session_state.messages.append({"role": "system", "content": system_reinforcement})
     
     with st.chat_message("user"):
         st.markdown(user_input)
