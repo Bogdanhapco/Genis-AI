@@ -107,11 +107,13 @@ if mode == "Flash":
     selected_power = "flash"
     display_name = "Genis Flash 2.0 20B"
     real_model_id = "openai/gpt-oss-20b"
+    vision_model_id = None
     supports_vision = False
 else:
     selected_power = "pro"
     display_name = "Genis Pro 2.1 120B"
-    real_model_id = "meta-llama/llama-4-maverick-405b-16e-instruct"  # Llama 4 Maverick (405B) with vision
+    real_model_id = "openai/gpt-oss-120b"  # Keep the big 120B model for text!
+    vision_model_id = "meta-llama/llama-4-maverick-17b-128e-instruct"  # Use Maverick only for vision
     supports_vision = True
 
 current_system_prompt = (
@@ -228,13 +230,21 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
             try:
                 st.caption(f"{display_name} is thinking...")
                 
+                # Choose model based on whether image is present
+                if uploaded_image and supports_vision:
+                    # Use vision model when image is uploaded
+                    model_to_use = vision_model_id
+                else:
+                    # Use main model (GPT-OSS 120B) for text-only
+                    model_to_use = real_model_id
+                
                 # Prepare messages for API call
                 api_messages = []
                 for m in st.session_state.messages:
                     api_messages.append({"role": m["role"], "content": m["content"]})
                 
                 stream = client.chat.completions.create(
-                    model=real_model_id,
+                    model=model_to_use,
                     messages=api_messages,
                     stream=True,
                     temperature=0.7,
