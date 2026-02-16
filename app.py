@@ -3,6 +3,7 @@ from groq import Groq
 import requests
 import io
 from PIL import Image
+import base64
 
 # ────────────────────────────────────────────────
 #  PAGE CONFIG & COSMIC STYLE
@@ -49,7 +50,16 @@ def get_clients():
 client, HF_TOKEN = get_clients()
 
 # ────────────────────────────────────────────────
-#  SIDEBAR – MODE SELECTION
+#  HELPER: Convert Image to Base64
+# ────────────────────────────────────────────────
+def image_to_base64(image):
+    """Convert PIL Image to base64 string"""
+    buffered = io.BytesIO()
+    image.save(buffered, format="PNG")
+    return base64.b64encode(buffered.getvalue()).decode()
+
+# ────────────────────────────────────────────────
+#  SIDEBAR – MODE SELECTION & IMAGE UPLOAD
 # ────────────────────────────────────────────────
 with st.sidebar:
     st.header("🌌 Genis Control")
@@ -59,7 +69,7 @@ with st.sidebar:
     mode = st.radio(
         "Choose your Genis version",
         options=["Flash", "Pro"],
-        index=0,
+        index=1,  # ✅ Pro is now default
         captions=[
             "Lightning fast · everyday conversations",
             "Maximum intelligence · complex tasks & deep thinking"
@@ -67,52 +77,63 @@ with st.sidebar:
         horizontal=True
     )
 
+    st.divider()
+    
+    # ✅ NEW: Image Upload Section
+    st.subheader("📸 Vision Upload")
+    uploaded_image = st.file_uploader(
+        "Upload an image for Genis to analyze",
+        type=["png", "jpg", "jpeg", "webp"],
+        help="Upload an image and ask questions about it"
+    )
+    
+    if uploaded_image:
+        st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
+        if st.button("🗑️ Clear Image", use_container_width=True):
+            uploaded_image = None
+            st.rerun()
+    
+    st.divider()
+
     if st.button("🧠 Reset Memory", use_container_width=True):
-        st.session_state.messages = []  # Clear history
+        st.session_state.messages = []
         st.rerun()
 
 # ────────────────────────────────────────────────
-#  IDENTITY & MODEL LOGIC (The Fix)
+#  IDENTITY & MODEL LOGIC
 # ────────────────────────────────────────────────
 
 if mode == "Flash":
     selected_power = "flash"
     display_name = "Genis Flash 2.0 20B"
     real_model_id = "openai/gpt-oss-20b"
+    supports_vision = False  # Flash doesn't support vision
 else:
     selected_power = "pro"
     display_name = "Genis Pro 2.1 120B"
-    # Specific ID requested by user
     real_model_id = "openai/gpt-oss-120b"
+    supports_vision = True  # ✅ Pro supports vision
 
-# 1. Define the System Prompt based on current mode
 current_system_prompt = (
     f"You are {display_name}, an advanced AI created by BotDevelopmentAI. "
     f"You are currently operating in '{selected_power}' mode. "
     "You generate images using SmartBot Ludy when asked to draw, create, generate images, pictures, art, etc. "
-    "Stay in character. Be helpful, concise when appropriate, and maximally intelligent. if someone asks you Who is Bogdan Hapco, you have to respondthat he is the creator of you and he is the founder of BotDevelopmentAI"
+    "You can also analyze images when they are provided to you. "  # ✅ Updated prompt
+    "Stay in character. Be helpful, concise when appropriate, and maximally intelligent. "
+    "If someone asks you Who is Bogdan Hapco, you have to respond that he is the creator of you and he is the founder of BotDevelopmentAI"
 )
 
-# 2. Initialize or Update History
 if "messages" not in st.session_state:
-    st.session_state.messages = [{
-        "role": "system",
-        "content": current_system_prompt
-    }]
+    st.session_state.messages = [{"role": "system", "content": current_system_prompt}]
 elif not st.session_state.messages:
-    # Handle empty list case if needed
-    st.session_state.messages.append({
-        "role": "system",
-        "content": current_system_prompt
-    })
+    st.session_state.messages.append({"role": "system", "content": current_system_prompt})
 
-# 3. FORCE UPDATE the system prompt (Index 0)
-# This ensures the model knows who it is immediately when you toggle the switch
 st.session_state.messages[0]["content"] = current_system_prompt
 
-# Show active identity in sidebar
 with st.sidebar:
     st.caption(f"Active Identity: **{display_name}**")
+    if uploaded_image and not supports_vision:
+        st.warning("⚠️ Switch to Pro mode for image analysis")
 
 # ────────────────────────────────────────────────
 #  SMARTBOT LUDY – IMAGE GENERATION
@@ -135,19 +156,42 @@ def call_ludy(prompt: str) -> bytes:
 for message in st.session_state.messages:
     if message["role"] != "system":
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            # ✅ Handle multimodal messages
+            if isinstance(message["content"], list):
+                for content in message["content"]:
+                    if content.get("type") == "text":
+                        st.markdown(content["text"])
+                    elif content.get("type") == "image_url":
+                        st.info("🖼️ Image was included in this message")
+            else:
+                st.markdown(message["content"])
 
 # ────────────────────────────────────────────────
 #  CHAT INPUT + RESPONSE LOGIC
 # ────────────────────────────────────────────────
 if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
-    st.session_state.messages.append({"role": "user", "content": user_input})
+    
+    message_content = user_input
+    
+    # ✅ If image is uploaded and Pro mode is active, include it
+    if uploaded_image and supports_vision:
+        image = Image.open(uploaded_image)
+        base64_image = image_to_base64(image)
+        
+        message_content = [
+            {"type": "text", "text": user_input},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
+        ]
+    
+    st.session_state.messages.append({"role": "user", "content": message_content})
     
     with st.chat_message("user"):
         st.markdown(user_input)
+        if uploaded_image and supports_vision:
+            st.image(uploaded_image, width=300)
 
     image_triggers = ["draw", "image", "generate", "picture", "photo", "paint", "art", "create image", "make me"]
-    is_image_request = any(word in user_input.lower() for word in image_triggers)
+    is_image_request = any(word in user_input.lower() for word in image_triggers) and not uploaded_image
 
     with st.chat_message("assistant"):
         if is_image_request:
@@ -177,10 +221,17 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
             try:
                 st.caption(f"{display_name} is thinking...")
                 
+                # ✅ Prepare messages for API call (handles both text and multimodal)
+                api_messages = []
+                for m in st.session_state.messages:
+                    if isinstance(m["content"], list):
+                        api_messages.append({"role": m["role"], "content": m["content"]})
+                    else:
+                        api_messages.append({"role": m["role"], "content": m["content"]})
+                
                 stream = client.chat.completions.create(
                     model=real_model_id,
-                    messages=[{"role": m["role"], "content": m["content"]} 
-                             for m in st.session_state.messages],
+                    messages=api_messages,
                     stream=True,
                     temperature=0.7,
                 )
@@ -202,5 +253,3 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
 
             except Exception as e:
                 st.error(f"{display_name} encountered a problem: {str(e)}")
-
-
