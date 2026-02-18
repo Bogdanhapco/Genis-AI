@@ -71,7 +71,7 @@ def image_to_base64(image):
 # ────────────────────────────────────────────────
 with st.sidebar:
     st.header("🌌 Genis Control")
-    st.info("Genis — created by BotDevelopmentAI")
+    st.info("Genis — created by BotDevelopmentAI - powerd using Groq's Hyperscale Facility")
 
     st.subheader("Power Mode")
     mode = st.radio(
@@ -79,8 +79,8 @@ with st.sidebar:
         options=["Flash", "Pro"],
         index=0,  # Flash is now default
         captions=[
-            "Lightning fast · everyday conversations",
-            "Maximum intelligence · complex tasks & deep thinking"
+            "Lightning fast · everyday conversations - the flash model is a fine tuned version of 'llama 3.1 8b instant'",
+            "Maximum intelligence · complex tasks & deep thinking - the vision model is a fine tuned version of 'llama 4 mavrick multimodel'"
         ],
         horizontal=True
     )
@@ -126,7 +126,7 @@ if mode == "Flash":
     supports_vision = False
 else:
     selected_power = "pro"
-    display_name = "Genis Pro 2.1 120B"
+    display_name = "Genis Pro 2.1 137B"
     real_model_id = "openai/gpt-oss-120b"  # Keep the big 120B model for text!
     vision_model_id = "meta-llama/llama-4-maverick-17b-128e-instruct"  # Use Maverick only for vision
     supports_vision = True
@@ -334,3 +334,4 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
     if image_was_uploaded:
         st.session_state.clear_image = True
         st.rerun()
+
