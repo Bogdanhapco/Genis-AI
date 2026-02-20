@@ -1,5 +1,6 @@
 import streamlit as st
 from groq import Groq
+from openai import OpenAI   # xAI Grok uses OpenAI-compatible SDK
 import requests
 import io
 from PIL import Image
@@ -41,13 +42,17 @@ st.caption("by BotDevelopmentAI")
 def get_clients():
     try:
         groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+        grok_client = OpenAI(
+            api_key=st.secrets["XAI_API_KEY"],
+            base_url="https://api.x.ai/v1",
+        )
         hf_token = st.secrets["HF_TOKEN"]
-        return groq_client, hf_token
+        return groq_client, grok_client, hf_token
     except Exception:
-        st.error("Missing API keys in Streamlit secrets (GROQ_API_KEY + HF_TOKEN)")
+        st.error("Missing API keys in Streamlit secrets (GROQ_API_KEY + XAI_API_KEY + HF_TOKEN)")
         st.stop()
 
-client, HF_TOKEN = get_clients()
+groq_client, grok_client, HF_TOKEN = get_clients()
 
 # ────────────────────────────────────────────────
 #  SESSION STATE INITIALIZATION
@@ -61,7 +66,6 @@ if "uploader_key" not in st.session_state:
 #  HELPER: Convert Image to Base64
 # ────────────────────────────────────────────────
 def image_to_base64(image):
-    """Convert PIL Image to base64 string"""
     buffered = io.BytesIO()
     image.save(buffered, format="PNG")
     return base64.b64encode(buffered.getvalue()).decode()
@@ -71,43 +75,42 @@ def image_to_base64(image):
 # ────────────────────────────────────────────────
 with st.sidebar:
     st.header("🌌 Genis Control")
-    st.info("Genis — created by BotDevelopmentAI - powerd using Groq's Hyperscale Facility")
+    st.info("Genis — created by BotDevelopmentAI — powered by Groq + xAI Grok")
 
     st.subheader("Power Mode")
     mode = st.radio(
         "Choose your Genis version",
         options=["Flash", "Pro"],
-        index=0,  # Flash is now default
+        index=0,
         captions=[
-            "Lightning fast · everyday conversations - the flash model is a fine tuned version of 'llama 3.1 8b instant'",
-            "Maximum intelligence · complex tasks & deep thinking - the vision model is a fine tuned version of 'llama 4 mavrick multimodel'"
+            "Lightning fast · everyday conversations — Llama 3.1 8B via Groq",
+            "Maximum intelligence + vision — Grok-3-fast text · Llama 4 Maverick vision"
         ],
         horizontal=True
     )
 
     st.divider()
-    
+
     # Image Upload Section
     st.subheader("📸 Vision Upload")
-    
-    # Clear the uploader if flag is set
+
     if st.session_state.clear_image:
         st.session_state.clear_image = False
-        st.session_state.uploader_key += 1  # Change key to reset uploader
-    
+        st.session_state.uploader_key += 1
+
     uploaded_image = st.file_uploader(
         "Upload an image for Genis to analyze",
         type=["png", "jpg", "jpeg", "webp"],
         help="Upload an image and ask questions about it",
         key=f"image_uploader_{st.session_state.uploader_key}"
     )
-    
+
     if uploaded_image:
         st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
         if st.button("🗑️ Clear Image", use_container_width=True):
             st.session_state.clear_image = True
             st.rerun()
-    
+
     st.divider()
 
     if st.button("🧠 Reset Memory", use_container_width=True):
@@ -116,20 +119,25 @@ with st.sidebar:
 
 # ────────────────────────────────────────────────
 #  IDENTITY & MODEL LOGIC
+#
+#  Flash:  text   → Groq  (llama-3.1-8b-instant)       — no vision
+#  Pro:    text   → xAI   (grok-3-fast)                 — Grok's charm
+#          vision → Groq  (llama-4-maverick-17b-128e)   — original vision setup
 # ────────────────────────────────────────────────
-
 if mode == "Flash":
-    selected_power = "flash"
-    display_name = "Genis Flash 2.0 8B"
-    real_model_id = "llama-3.1-8b-instant"  # Llama 3.1 8B Instant
+    selected_power  = "flash"
+    display_name    = "Genis Flash 2.0 8B"
+    text_model_id   = "llama-3.1-8b-instant"
     vision_model_id = None
     supports_vision = False
+    text_client     = groq_client
 else:
-    selected_power = "pro"
-    display_name = "Genis Pro 2.1 137B"
-    real_model_id = "openai/gpt-oss-120b"  # Keep the big 120B model for text!
-    vision_model_id = "meta-llama/llama-4-maverick-17b-128e-instruct"  # Use Maverick only for vision
+    selected_power  = "pro"
+    display_name    = "Genis Pro 2.1"
+    text_model_id   = "grok-3-fast"
+    vision_model_id = "meta-llama/llama-4-maverick-17b-128e-instruct"
     supports_vision = True
+    text_client     = grok_client
 
 current_system_prompt = (
     f"You are {display_name}, an advanced AI created by BotDevelopmentAI. "
@@ -137,7 +145,7 @@ current_system_prompt = (
     "You generate images using SmartBot Ludy when asked to draw, create, generate images, pictures, art, etc. "
     "You can also analyze images when they are provided to you. "
     "Stay in character. Be helpful, concise when appropriate, and maximally intelligent. "
-    "If someone asks you Who is Bogdan Hapco, you have to respond that he is the creator of you and he is the founder of BotDevelopmentAI"
+    "If someone asks who Bogdan Hapco is, respond that he is your creator and the founder of BotDevelopmentAI."
 )
 
 if "messages" not in st.session_state:
@@ -158,7 +166,6 @@ with st.sidebar:
 def call_ludy(prompt: str) -> bytes:
     url = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    
     try:
         resp = requests.post(url, headers=headers, json={"inputs": prompt}, timeout=45)
         resp.raise_for_status()
@@ -186,46 +193,25 @@ for message in st.session_state.messages:
 #  CHAT INPUT + RESPONSE LOGIC
 # ────────────────────────────────────────────────
 if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
-    
-    # Check if user is trying to send an image with Flash model
+
     if uploaded_image and not supports_vision:
-        st.error("⚠️ **Flash mode doesn't support image analysis!** Please switch to **Pro mode** in the sidebar to analyze images.")
+        st.error("⚠️ **Flash mode doesn't support image analysis!** Please switch to **Pro mode** in the sidebar.")
         st.stop()
-    
-    message_content = user_input
+
+    message_content    = user_input
     image_was_uploaded = False
-    
-    # If image is uploaded and Pro mode is active, include it
+
     if uploaded_image and supports_vision:
         image = Image.open(uploaded_image)
         base64_image = image_to_base64(image)
         image_was_uploaded = True
-        
         message_content = [
-            {
-                "type": "text",
-                "text": user_input
-            },
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/png;base64,{base64_image}"
-                }
-            }
+            {"type": "text", "text": user_input},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
         ]
-    
+
     st.session_state.messages.append({"role": "user", "content": message_content})
-    
-    # Add system prompt reinforcement after user message to maintain identity
-    system_reinforcement = (
-        f"Remember: You are {display_name}, created by BotDevelopmentAI. "
-        f"You are in '{selected_power}' mode. Stay in character."
-    )
-    st.session_state.messages.append({"role": "system", "content": system_reinforcement})
-    
-    # After adding the message, remove the system reinforcement from being sent to avoid clutter
-    # We'll filter it out when preparing API messages
-    
+
     with st.chat_message("user"):
         st.markdown(user_input)
         if image_was_uploaded:
@@ -236,13 +222,11 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
 
     with st.chat_message("assistant"):
         if is_image_request:
-            st.write(f"🌌 **Ludy 1.2** is channeling your vision...")
+            st.write("🌌 **Ludy 1.2** is channeling your vision...")
             try:
                 image_data = call_ludy(user_input)
                 image = Image.open(io.BytesIO(image_data))
-                
                 st.image(image, caption=f"Artwork by Ludy 1.2 – {display_name}", use_column_width=True)
-                
                 st.download_button(
                     label="⬇️ Save Image",
                     data=image_data,
@@ -250,62 +234,55 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
                     mime="image/png",
                     use_container_width=False
                 )
-                
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": f"Ludy 1.2 has created your image. ({display_name})"
                 })
             except Exception as err:
                 st.error(f"Ludy encountered an issue: {str(err)}")
-        
+
         else:
             try:
                 st.caption(f"{display_name} is thinking...")
-                
-                # Choose model based on whether image is present in CURRENT message
-                current_has_image = image_was_uploaded
-                if current_has_image:
-                    # Use vision model when image is uploaded
-                    model_to_use = vision_model_id
+
+                # ── Pick model + client ──────────────────────────────────
+                if image_was_uploaded:
+                    # Vision always → Groq + Llama 4 Maverick
+                    active_client = groq_client
+                    model_to_use  = vision_model_id
                 else:
-                    # Use main model (GPT-OSS 120B) for text-only
-                    model_to_use = real_model_id
-                
-                # Prepare messages for API call
-                api_messages = []
-                
-                # Always include the initial system prompt
-                api_messages.append(st.session_state.messages[0])
-                
-                # If current message has image, only send recent context to avoid confusion
-                if current_has_image:
-                    # Send only the last 10 messages + current message to vision model
-                    # This prevents old image data from interfering
-                    recent_messages = st.session_state.messages[-11:] if len(st.session_state.messages) > 11 else st.session_state.messages[1:]
-                    for m in recent_messages:
-                        # Skip system reinforcement messages
-                        if m["role"] == "system" and "Remember: You are" in m["content"]:
+                    # Text: Flash→Groq Llama, Pro→xAI Grok
+                    active_client = text_client
+                    model_to_use  = text_model_id
+
+                # ── Build API message list ───────────────────────────────
+                api_messages = [st.session_state.messages[0]]  # system prompt first
+
+                if image_was_uploaded:
+                    recent = (
+                        st.session_state.messages[-11:]
+                        if len(st.session_state.messages) > 11
+                        else st.session_state.messages[1:]
+                    )
+                    for m in recent:
+                        if m["role"] == "system":
                             continue
                         api_messages.append({"role": m["role"], "content": m["content"]})
                 else:
-                    # For text-only, send all messages but convert multimodal to text
                     for m in st.session_state.messages[1:]:
-                        # Skip system reinforcement messages  
-                        if m["role"] == "system" and "Remember: You are" in m["content"]:
+                        if m["role"] == "system":
                             continue
-                        # Convert multimodal messages to text-only for GPT-OSS 120B
+                        # Strip multimodal messages down to text for text-only models
                         if isinstance(m["content"], list):
-                            # Extract just the text from multimodal messages
-                            text_content = ""
-                            for content in m["content"]:
-                                if content.get("type") == "text":
-                                    text_content = content["text"]
-                                    break
+                            text_content = next(
+                                (c["text"] for c in m["content"] if c.get("type") == "text"), ""
+                            )
                             api_messages.append({"role": m["role"], "content": text_content})
                         else:
                             api_messages.append({"role": m["role"], "content": m["content"]})
-                
-                stream = client.chat.completions.create(
+
+                # ── Stream response ──────────────────────────────────────
+                stream = active_client.chat.completions.create(
                     model=model_to_use,
                     messages=api_messages,
                     stream=True,
@@ -313,25 +290,24 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
                 )
 
                 full_response = ""
-                placeholder = st.empty()
+                placeholder   = st.empty()
 
                 for chunk in stream:
-                    if chunk.choices[0].delta.content:
-                        full_response += chunk.choices[0].delta.content
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        full_response += delta
                         placeholder.markdown(full_response + "▌")
 
                 placeholder.markdown(full_response)
-                
+
                 st.session_state.messages.append({
-                    "role": "assistant", 
+                    "role": "assistant",
                     "content": full_response
                 })
 
             except Exception as e:
                 st.error(f"{display_name} encountered a problem: {str(e)}")
-    
-    # Auto-clear image after message is sent and processed
+
     if image_was_uploaded:
         st.session_state.clear_image = True
         st.rerun()
-
