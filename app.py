@@ -78,8 +78,8 @@ with st.sidebar:
         options=["Flash", "Pro"],
         index=0,
         captions=[
-            "Lightning fast · everyday conversations — Llama 3.1 8B",
-            "Maximum intelligence + vision — Llama 3.3 70B with Grok-style personality"
+            "Lightning fast · everyday conversations — Genis 2.0 8B",
+            "Maximum intelligence + vision — Genis 3.0 137B"
         ],
         horizontal=True
     )
@@ -313,3 +313,4 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
     if image_was_uploaded:
         st.session_state.clear_image = True
         st.rerun()
+
