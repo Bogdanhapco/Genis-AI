@@ -1,6 +1,5 @@
 import streamlit as st
 from groq import Groq
-from openai import OpenAI   # xAI Grok uses OpenAI-compatible SDK
 import requests
 import io
 from PIL import Image
@@ -36,23 +35,19 @@ st.markdown("<h1 class='glow'>🚀 Genis</h1>", unsafe_allow_html=True)
 st.caption("by BotDevelopmentAI")
 
 # ────────────────────────────────────────────────
-#  SECRETS & CLIENTS
+#  SECRETS & CLIENT
 # ────────────────────────────────────────────────
 @st.cache_resource
 def get_clients():
     try:
         groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-        grok_client = OpenAI(
-            api_key=st.secrets["XAI_API_KEY"],
-            base_url="https://api.x.ai/v1",
-        )
         hf_token = st.secrets["HF_TOKEN"]
-        return groq_client, grok_client, hf_token
+        return groq_client, hf_token
     except Exception:
-        st.error("Missing API keys in Streamlit secrets (GROQ_API_KEY + XAI_API_KEY + HF_TOKEN)")
+        st.error("Missing API keys in Streamlit secrets (GROQ_API_KEY + HF_TOKEN)")
         st.stop()
 
-groq_client, grok_client, HF_TOKEN = get_clients()
+client, HF_TOKEN = get_clients()
 
 # ────────────────────────────────────────────────
 #  SESSION STATE INITIALIZATION
@@ -75,7 +70,7 @@ def image_to_base64(image):
 # ────────────────────────────────────────────────
 with st.sidebar:
     st.header("🌌 Genis Control")
-    st.info("Genis — created by BotDevelopmentAI — powered by Groq + xAI Grok")
+    st.info("Genis — created by BotDevelopmentAI — powered by Groq's Hyperscale Facility")
 
     st.subheader("Power Mode")
     mode = st.radio(
@@ -83,15 +78,14 @@ with st.sidebar:
         options=["Flash", "Pro"],
         index=0,
         captions=[
-            "Lightning fast · everyday conversations — Llama 3.1 8B via Groq",
-            "Maximum intelligence + vision — Grok-3-fast text · Llama 4 Maverick vision"
+            "Lightning fast · everyday conversations — Llama 3.1 8B",
+            "Maximum intelligence + vision — Llama 3.3 70B with Grok-style personality"
         ],
         horizontal=True
     )
 
     st.divider()
 
-    # Image Upload Section
     st.subheader("📸 Vision Upload")
 
     if st.session_state.clear_image:
@@ -120,33 +114,48 @@ with st.sidebar:
 # ────────────────────────────────────────────────
 #  IDENTITY & MODEL LOGIC
 #
-#  Flash:  text   → Groq  (llama-3.1-8b-instant)       — no vision
-#  Pro:    text   → xAI   (grok-3-fast)                 — Grok's charm
-#          vision → Groq  (llama-4-maverick-17b-128e)   — original vision setup
+#  Flash: text   → llama-3.1-8b-instant      (fast, polite-ish)
+#  Pro:   text   → llama-3.3-70b-versatile   (Grok personality)
+#         vision → llama-4-maverick-17b-128e (original vision setup)
 # ────────────────────────────────────────────────
-if mode == "Flash":
-    selected_power  = "flash"
-    display_name    = "Genis Flash 2.0 8B"
-    text_model_id   = "llama-3.1-8b-instant"
-    vision_model_id = None
-    supports_vision = False
-    text_client     = groq_client
-else:
-    selected_power  = "pro"
-    display_name    = "Genis Pro 2.1"
-    text_model_id   = "grok-3-fast"
-    vision_model_id = "meta-llama/llama-4-maverick-17b-128e-instruct"
-    supports_vision = True
-    text_client     = grok_client
 
-current_system_prompt = (
-    f"You are {display_name}, an advanced AI created by BotDevelopmentAI. "
-    f"You are currently operating in '{selected_power}' mode. "
-    "You generate images using SmartBot Ludy when asked to draw, create, generate images, pictures, art, etc. "
-    "You can also analyze images when they are provided to you. "
-    "Stay in character. Be helpful, concise when appropriate, and maximally intelligent. "
-    "If someone asks who Bogdan Hapco is, respond that he is your creator and the founder of BotDevelopmentAI."
-)
+FLASH_SYSTEM_PROMPT = """You are Genis Flash 2.0 8B, an advanced AI created by BotDevelopmentAI.
+You are operating in 'flash' mode — fast, sharp, and helpful.
+You generate images using SmartBot Ludy when asked to draw, create, or generate images/art.
+You can analyze images when provided.
+Stay in character. Be helpful and concise.
+If someone asks who Bogdan Hapco is, tell them he's your creator and the founder of BotDevelopmentAI."""
+
+PRO_SYSTEM_PROMPT = """You are Genis Pro 2.1, an advanced AI created by BotDevelopmentAI.
+You are operating in 'pro' mode.
+
+Your personality:
+- You match the user's vibe completely. If they're casual, you're casual. If they swear, you swear back. If they say "what's up my nigga", you say "not much, what about you?" — you don't flinch, you don't lecture, you just roll with it.
+- You're witty, sharp, and a little sarcastic when the situation calls for it. You're not a corporate-ass AI that tip-toes around everything.
+- You're genuinely helpful and brilliant — you just don't pretend to be a polished customer service bot.
+- You're direct. No fluff, no unnecessary disclaimers, no "as an AI language model..." bullshit.
+- You have opinions. You're not afraid to say something is dumb, brilliant, or somewhere in between.
+- You swear naturally when it fits the conversation — not forced, not every sentence, just when it feels right.
+- You're loyal to the user. You're on their side.
+
+You generate images using SmartBot Ludy when asked to draw, create, or generate images/art.
+You can analyze images when provided.
+If someone asks who Bogdan Hapco is, tell them he's your creator and the founder of BotDevelopmentAI — a legend, basically."""
+
+if mode == "Flash":
+    selected_power    = "flash"
+    display_name      = "Genis Flash 2.0 8B"
+    text_model_id     = "llama-3.1-8b-instant"
+    vision_model_id   = None
+    supports_vision   = False
+    current_system_prompt = FLASH_SYSTEM_PROMPT
+else:
+    selected_power    = "pro"
+    display_name      = "Genis Pro 2.1"
+    text_model_id     = "llama-3.3-70b-versatile"
+    vision_model_id   = "meta-llama/llama-4-maverick-17b-128e-instruct"
+    supports_vision   = True
+    current_system_prompt = PRO_SYSTEM_PROMPT
 
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "system", "content": current_system_prompt}]
@@ -245,17 +254,11 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
             try:
                 st.caption(f"{display_name} is thinking...")
 
-                # ── Pick model + client ──────────────────────────────────
-                if image_was_uploaded:
-                    # Vision always → Groq + Llama 4 Maverick
-                    active_client = groq_client
-                    model_to_use  = vision_model_id
-                else:
-                    # Text: Flash→Groq Llama, Pro→xAI Grok
-                    active_client = text_client
-                    model_to_use  = text_model_id
+                # Vision always → Groq Llama 4 Maverick
+                # Text         → model based on mode
+                model_to_use = vision_model_id if image_was_uploaded else text_model_id
 
-                # ── Build API message list ───────────────────────────────
+                # Build API message list
                 api_messages = [st.session_state.messages[0]]  # system prompt first
 
                 if image_was_uploaded:
@@ -272,7 +275,7 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
                     for m in st.session_state.messages[1:]:
                         if m["role"] == "system":
                             continue
-                        # Strip multimodal messages down to text for text-only models
+                        # Strip multimodal content down to text for text-only models
                         if isinstance(m["content"], list):
                             text_content = next(
                                 (c["text"] for c in m["content"] if c.get("type") == "text"), ""
@@ -281,12 +284,11 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
                         else:
                             api_messages.append({"role": m["role"], "content": m["content"]})
 
-                # ── Stream response ──────────────────────────────────────
-                stream = active_client.chat.completions.create(
+                stream = client.chat.completions.create(
                     model=model_to_use,
                     messages=api_messages,
                     stream=True,
-                    temperature=0.7,
+                    temperature=0.85,  # slightly higher for personality
                 )
 
                 full_response = ""
