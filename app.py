@@ -151,7 +151,7 @@ if mode == "Flash":
     current_system_prompt = FLASH_SYSTEM_PROMPT
 else:
     selected_power    = "pro"
-    display_name      = "Genis Pro 2.1"
+    display_name      = "Genis Pro 3.0"
     text_model_id     = "llama-3.3-70b-versatile"
     vision_model_id   = "meta-llama/llama-4-maverick-17b-128e-instruct"
     supports_vision   = True
@@ -313,4 +313,5 @@ if user_input := st.chat_input(f"Talk to {display_name} • draw with Ludy..."):
     if image_was_uploaded:
         st.session_state.clear_image = True
         st.rerun()
+
 
