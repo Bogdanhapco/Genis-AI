@@ -64,7 +64,7 @@ def image_to_base64(image):
 # ── Sidebar ──────────────────────────────────────────────────────────
 with st.sidebar:
     st.header("🌌 Genis Control")
-    st.info("Genis — created by BotDevelopmentAI — powered by Groq's Hyperscale Facility")
+    st.info("Genis — created by BotDevelopmentAI — powered by Groq's Hyperscale Facility - Ludy powerd by BotDevelopmentAI Cloud")
 
     st.subheader("Power Mode")
     mode = st.radio(
@@ -170,7 +170,7 @@ with st.sidebar:
 def generate_image_with_ludy(prompt: str):
     """Send request to laptop server and poll until done."""
     if not ludy_online:
-        raise RuntimeError("Ludy server is offline. Make sure start_ludy.bat is running on your laptop!")
+        raise RuntimeError("Ludy server is temporary offline")
 
     # Submit job
     res = requests.post(
@@ -299,5 +299,6 @@ if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."
     if image_was_uploaded:
         st.session_state.clear_image = True
         st.rerun()
+
 
 
