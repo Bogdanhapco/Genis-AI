@@ -6,7 +6,6 @@ import time
 from PIL import Image
 import base64
 
-# ── Page config ──────────────────────────────────────────────────────
 st.set_page_config(page_title="Genis Pro", page_icon="🚀", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
@@ -38,8 +37,9 @@ st.caption("by BotDevelopmentAI")
 LUDY_SERVER_URL = "https://ruthenious-unconsiderablely-aryanna.ngrok-free.dev"
 #  ↑↑↑  PASTE YOUR NGROK URL ABOVE  ↑↑↑
 # ══════════════════════════════════════════════════════════════════
+LUDY_FLASH_URL = LUDY_SERVER_URL
+LUDY_PRO_URL   = LUDY_SERVER_URL
 
-# ── Secrets & clients ────────────────────────────────────────────────
 @st.cache_resource
 def get_client():
     try:
@@ -50,7 +50,6 @@ def get_client():
 
 client = get_client()
 
-# ── Session state ────────────────────────────────────────────────────
 if "clear_image" not in st.session_state:
     st.session_state.clear_image = False
 if "uploader_key" not in st.session_state:
@@ -61,10 +60,9 @@ def image_to_base64(image):
     image.save(buffered, format="PNG")
     return base64.b64encode(buffered.getvalue()).decode()
 
-# ── Sidebar ──────────────────────────────────────────────────────────
 with st.sidebar:
     st.header("🌌 Genis Control")
-    st.info("Genis — created by BotDevelopmentAI — powered by Groq's Hyperscale Facility and BotDevelopmentAI cloud for Ludy")
+    st.info("Genis — created by BotDevelopmentAI — powered by Groq & BotDevelopmentAI cloud")
 
     st.subheader("Power Mode")
     mode = st.radio(
@@ -99,29 +97,31 @@ with st.sidebar:
 
     st.divider()
 
-    # Ludy server status
-    ludy_online = False
+    # Check server
+    server_online = False
+    active_model  = "unknown"
     try:
-        r = requests.get(f"{LUDY_SERVER_URL}/health", timeout=3)
-        ludy_online = r.status_code == 200
-    except:
-        pass
+        r = requests.get(f"{LUDY_SERVER_URL}/health", timeout=3).json()
+        server_online = True
+        active_model  = r.get("active_model", "unknown")
+    except: pass
 
-    if ludy_online:
-        st.success("🎨 Ludy 2.0 online")
+    if server_online:
+        st.success(f"🎨 Ludy online — {active_model} loaded")
     else:
         st.warning("🎨 Ludy offline — images unavailable")
+    
+    flash_online = server_online
+    pro_online   = server_online
 
     st.divider()
-
     if st.button("🧠 Reset Memory", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
-# ── Model config ─────────────────────────────────────────────────────
 FLASH_SYSTEM_PROMPT = """You are Genis Flash 2.0 8B, an advanced AI created by BotDevelopmentAI.
 You are operating in 'flash' mode — fast, sharp, and helpful.
-You generate images using Ludy 2.0 when asked to draw, create, or generate images/art.
+You generate images using Ludy when asked to draw, create, or generate images/art.
 You can analyze images when provided.
 Stay in character. Be helpful and concise.
 If someone asks who Bogdan Hapco is, tell them he's your creator and the founder of BotDevelopmentAI."""
@@ -138,22 +138,28 @@ Your personality:
 - You swear naturally when it fits the conversation — not forced, not every sentence, just when it feels right.
 - You're loyal to the user. You're on their side.
 
-You generate images using Ludy 2.0 when asked to draw, create, or generate images/art.
+You generate images using Ludy when asked to draw, create, or generate images/art.
 You can analyze images when provided.
 If someone asks who Bogdan Hapco is, tell them he's your creator and the founder of BotDevelopmentAI — a legend, basically."""
 
 if mode == "Flash":
-    display_name        = "Genis Flash 2.0 8B"
-    text_model_id       = "llama-3.1-8b-instant"
-    vision_model_id     = None
-    supports_vision     = False
+    display_name          = "Genis Flash 2.0 8B"
+    text_model_id         = "llama-3.1-8b-instant"
+    vision_model_id       = None
+    supports_vision       = False
     current_system_prompt = FLASH_SYSTEM_PROMPT
+    ludy_url              = LUDY_FLASH_URL
+    ludy_online           = flash_online
+    ludy_name             = "Ludy Flash"
 else:
-    display_name        = "Genis Pro 3.0"
-    text_model_id       = "llama-3.3-70b-versatile"
-    vision_model_id     = "meta-llama/llama-4-maverick-17b-128e-instruct"
-    supports_vision     = True
+    display_name          = "Genis Pro 3.0"
+    text_model_id         = "llama-3.3-70b-versatile"
+    vision_model_id       = "meta-llama/llama-4-maverick-17b-128e-instruct"
+    supports_vision       = True
     current_system_prompt = PRO_SYSTEM_PROMPT
+    ludy_url              = LUDY_PRO_URL
+    ludy_online           = pro_online
+    ludy_name             = "Ludy Pro"
 
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "system", "content": current_system_prompt}]
@@ -166,51 +172,39 @@ with st.sidebar:
     if uploaded_image and not supports_vision:
         st.warning("⚠️ Switch to Pro for image analysis")
 
-# ── Ludy image generation ────────────────────────────────────────────
 def generate_image_with_ludy(prompt: str):
-    """Send request to laptop server, show queue + progress, return image bytes."""
     if not ludy_online:
-        raise RuntimeError("Ludy server is offline for now.")
+        raise RuntimeError(f"{ludy_name} server is offline.")
 
-    # Submit job
-    res = requests.post(
-        f"{LUDY_SERVER_URL}/generate",
-        json={"prompt": prompt},
-        timeout=10,
-    )
-    data     = res.json()
-    job_id   = data["job_id"]
+    model_key = "flash" if mode == "Flash" else "pro"
+    res       = requests.post(f"{ludy_url}/generate", json={"prompt": prompt, "model": model_key}, timeout=10)
+    data      = res.json()
+    job_id    = data["job_id"]
     queue_pos = data.get("queue_pos", 1)
 
-    status_text = st.empty()
+    status_text  = st.empty()
     progress_bar = st.empty()
 
-    # Poll every 3 seconds until done
-    for _ in range(120):  # max 6 minutes
+    for _ in range(120):
         time.sleep(3)
-        status_res = requests.get(f"{LUDY_SERVER_URL}/status/{job_id}", timeout=5)
-        data = status_res.json()
+        data = requests.get(f"{ludy_url}/status/{job_id}", timeout=5).json()
         s    = data.get("status", "queued")
 
         if s == "queued":
             pos = data.get("queue_pos", queue_pos)
-            status_text.info(f"🕐 Ludy 2.0 — Position {pos} in queue...")
+            status_text.info(f"🕐 {ludy_name} — Position {pos} in queue...")
             progress_bar.progress(0)
-
         elif s == "generating":
             pct = data.get("progress", 0)
-            status_text.info(f"🎨 Ludy 2.0 — Generating... {pct}%")
+            status_text.info(f"🎨 {ludy_name} — Generating... {pct}%")
             progress_bar.progress(max(1, pct))
-
         elif s == "done":
-            status_text.success("✅ Ludy 2.0 — Done!")
+            status_text.success(f"✅ {ludy_name} — Done!")
             progress_bar.progress(100)
             time.sleep(0.5)
             status_text.empty()
             progress_bar.empty()
-            b64 = data["image"].split(",")[1]
-            return base64.b64decode(b64)
-
+            return base64.b64decode(data["image"].split(",")[1])
         elif s == "error":
             status_text.empty()
             progress_bar.empty()
@@ -220,7 +214,6 @@ def generate_image_with_ludy(prompt: str):
     progress_bar.empty()
     raise RuntimeError("Generation timed out after 6 minutes")
 
-# ── Chat history display ─────────────────────────────────────────────
 for message in st.session_state.messages:
     if message["role"] != "system":
         with st.chat_message(message["role"]):
@@ -233,7 +226,6 @@ for message in st.session_state.messages:
             else:
                 st.markdown(message["content"])
 
-# ── Chat input ───────────────────────────────────────────────────────
 if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."):
 
     if uploaded_image and not supports_vision:
@@ -244,7 +236,7 @@ if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."
     image_was_uploaded = False
 
     if uploaded_image and supports_vision:
-        image = Image.open(uploaded_image)
+        image        = Image.open(uploaded_image)
         base64_image = image_to_base64(image)
         image_was_uploaded = True
         message_content = [
@@ -264,11 +256,11 @@ if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."
 
     with st.chat_message("assistant"):
         if is_image_request:
-            st.write("🌌 **Ludy 2.0** is working on your image...")
+            st.write(f"🌌 **{ludy_name}** is working on your image...")
             try:
                 image_data = generate_image_with_ludy(user_input)
                 image      = Image.open(io.BytesIO(image_data))
-                st.image(image, caption=f"Created by Ludy 2.0 for {display_name}", use_column_width=True)
+                st.image(image, caption=f"Created by {ludy_name}", use_column_width=True)
                 st.download_button(
                     label="⬇️ Save Image",
                     data=image_data,
@@ -276,8 +268,8 @@ if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."
                     mime="image/png",
                 )
                 st.session_state.messages.append({
-                    "role":    "assistant",
-                    "content": f"Here's your image, generated by Ludy 2.0! ({display_name})"
+                    "role": "assistant",
+                    "content": f"Here's your image, generated by {ludy_name}! ({display_name})"
                 })
             except Exception as err:
                 st.error(f"Ludy encountered an issue: {str(err)}")
@@ -324,18 +316,3 @@ if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."
     if image_was_uploaded:
         st.session_state.clear_image = True
         st.rerun()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
