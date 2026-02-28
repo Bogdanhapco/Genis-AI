@@ -268,7 +268,7 @@ if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."
             try:
                 image_data = generate_image_with_ludy(user_input)
                 image      = Image.open(io.BytesIO(image_data))
-                st.image(image, caption=f"Created by Ludy 1.2 for {display_name}", use_column_width=True)
+                st.image(image, caption=f"Created by Ludy 2.0 for {display_name}", use_column_width=True)
                 st.download_button(
                     label="⬇️ Save Image",
                     data=image_data,
@@ -324,6 +324,7 @@ if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."
     if image_was_uploaded:
         st.session_state.clear_image = True
         st.rerun()
+
 
 
 
