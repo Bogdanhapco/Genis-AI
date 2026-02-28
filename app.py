@@ -35,7 +35,7 @@ st.caption("by BotDevelopmentAI")
 
 # ══════════════════════════════════════════════════════════════════
 #  ↓↓↓  ONLY LINE YOU NEED TO UPDATE WHEN NGROK URL CHANGES  ↓↓↓
-LUDY_SERVER_URL = "https://YOUR-URL-HERE.ngrok-free.app"
+LUDY_SERVER_URL = "https://ruthenious-unconsiderablely-aryanna.ngrok-free.dev"
 #  ↑↑↑  PASTE YOUR NGROK URL ABOVE  ↑↑↑
 # ══════════════════════════════════════════════════════════════════
 
@@ -324,3 +324,4 @@ if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."
     if image_was_uploaded:
         st.session_state.clear_image = True
         st.rerun()
+
