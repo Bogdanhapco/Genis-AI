@@ -64,7 +64,7 @@ def image_to_base64(image):
 # ── Sidebar ──────────────────────────────────────────────────────────
 with st.sidebar:
     st.header("🌌 Genis Control")
-    st.info("Genis — created by BotDevelopmentAI — powered by Groq's Hyperscale Facility")
+    st.info("Genis — created by BotDevelopmentAI — powered by Groq's Hyperscale Facility and BotDevelopmentAI cloud for Ludy")
 
     st.subheader("Power Mode")
     mode = st.radio(
@@ -108,7 +108,7 @@ with st.sidebar:
         pass
 
     if ludy_online:
-        st.success("🎨 Ludy 1.2 online")
+        st.success("🎨 Ludy 2.0 online")
     else:
         st.warning("🎨 Ludy offline — images unavailable")
 
@@ -121,12 +121,12 @@ with st.sidebar:
 # ── Model config ─────────────────────────────────────────────────────
 FLASH_SYSTEM_PROMPT = """You are Genis Flash 2.0 8B, an advanced AI created by BotDevelopmentAI.
 You are operating in 'flash' mode — fast, sharp, and helpful.
-You generate images using Ludy 1.2 when asked to draw, create, or generate images/art.
+You generate images using Ludy 2.0 when asked to draw, create, or generate images/art.
 You can analyze images when provided.
 Stay in character. Be helpful and concise.
 If someone asks who Bogdan Hapco is, tell them he's your creator and the founder of BotDevelopmentAI."""
 
-PRO_SYSTEM_PROMPT = """You are Genis Pro 2.1, an advanced AI created by BotDevelopmentAI.
+PRO_SYSTEM_PROMPT = """You are Genis Pro 3.0, an advanced AI created by BotDevelopmentAI.
 You are operating in 'pro' mode.
 
 Your personality:
@@ -138,7 +138,7 @@ Your personality:
 - You swear naturally when it fits the conversation — not forced, not every sentence, just when it feels right.
 - You're loyal to the user. You're on their side.
 
-You generate images using Ludy 1.2 when asked to draw, create, or generate images/art.
+You generate images using Ludy 2.0 when asked to draw, create, or generate images/art.
 You can analyze images when provided.
 If someone asks who Bogdan Hapco is, tell them he's your creator and the founder of BotDevelopmentAI — a legend, basically."""
 
@@ -170,7 +170,7 @@ with st.sidebar:
 def generate_image_with_ludy(prompt: str):
     """Send request to laptop server, show queue + progress, return image bytes."""
     if not ludy_online:
-        raise RuntimeError("Ludy server is offline. Make sure start_ludy.bat is running on your laptop!")
+        raise RuntimeError("Ludy server is offline for now.")
 
     # Submit job
     res = requests.post(
@@ -194,16 +194,16 @@ def generate_image_with_ludy(prompt: str):
 
         if s == "queued":
             pos = data.get("queue_pos", queue_pos)
-            status_text.info(f"🕐 Ludy 1.0 — Position {pos} in queue...")
+            status_text.info(f"🕐 Ludy 2.0 — Position {pos} in queue...")
             progress_bar.progress(0)
 
         elif s == "generating":
             pct = data.get("progress", 0)
-            status_text.info(f"🎨 Ludy 1.0 — Generating... {pct}%")
+            status_text.info(f"🎨 Ludy 2.0 — Generating... {pct}%")
             progress_bar.progress(max(1, pct))
 
         elif s == "done":
-            status_text.success("✅ Ludy 1.0 — Done!")
+            status_text.success("✅ Ludy 2.0 — Done!")
             progress_bar.progress(100)
             time.sleep(0.5)
             status_text.empty()
@@ -264,7 +264,7 @@ if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."
 
     with st.chat_message("assistant"):
         if is_image_request:
-            st.write("🌌 **Ludy 1.0** is working on your image...")
+            st.write("🌌 **Ludy 2.0** is working on your image...")
             try:
                 image_data = generate_image_with_ludy(user_input)
                 image      = Image.open(io.BytesIO(image_data))
@@ -324,5 +324,6 @@ if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."
     if image_was_uploaded:
         st.session_state.clear_image = True
         st.rerun()
+
 
 
