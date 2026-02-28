@@ -35,7 +35,7 @@ st.caption("by BotDevelopmentAI")
 
 # ══════════════════════════════════════════════════════════════════
 #  ↓↓↓  ONLY LINE YOU NEED TO UPDATE WHEN NGROK URL CHANGES  ↓↓↓
-LUDY_SERVER_URL = "https://ruthenious-unconsiderablely-aryanna.ngrok-free.dev"
+LUDY_SERVER_URL = "https://YOUR-URL-HERE.ngrok-free.app"
 #  ↑↑↑  PASTE YOUR NGROK URL ABOVE  ↑↑↑
 # ══════════════════════════════════════════════════════════════════
 
@@ -64,7 +64,7 @@ def image_to_base64(image):
 # ── Sidebar ──────────────────────────────────────────────────────────
 with st.sidebar:
     st.header("🌌 Genis Control")
-    st.info("Genis — created by BotDevelopmentAI — powered by Groq's Hyperscale Facility - Ludy powerd by BotDevelopmentAI Cloud")
+    st.info("Genis — created by BotDevelopmentAI — powered by Groq's Hyperscale Facility")
 
     st.subheader("Power Mode")
     mode = st.radio(
@@ -168,9 +168,9 @@ with st.sidebar:
 
 # ── Ludy image generation ────────────────────────────────────────────
 def generate_image_with_ludy(prompt: str):
-    """Send request to laptop server and poll until done."""
+    """Send request to laptop server, show queue + progress, return image bytes."""
     if not ludy_online:
-        raise RuntimeError("Ludy server is temporary offline")
+        raise RuntimeError("Ludy server is offline. Make sure start_ludy.bat is running on your laptop!")
 
     # Submit job
     res = requests.post(
@@ -178,21 +178,46 @@ def generate_image_with_ludy(prompt: str):
         json={"prompt": prompt},
         timeout=10,
     )
-    job_id = res.json()["job_id"]
+    data     = res.json()
+    job_id   = data["job_id"]
+    queue_pos = data.get("queue_pos", 1)
+
+    status_text = st.empty()
+    progress_bar = st.empty()
 
     # Poll every 3 seconds until done
     for _ in range(120):  # max 6 minutes
         time.sleep(3)
         status_res = requests.get(f"{LUDY_SERVER_URL}/status/{job_id}", timeout=5)
         data = status_res.json()
+        s    = data.get("status", "queued")
 
-        if data["status"] == "done":
-            # Strip data URI prefix and return raw bytes
+        if s == "queued":
+            pos = data.get("queue_pos", queue_pos)
+            status_text.info(f"🕐 Ludy 1.0 — Position {pos} in queue...")
+            progress_bar.progress(0)
+
+        elif s == "generating":
+            pct = data.get("progress", 0)
+            status_text.info(f"🎨 Ludy 1.0 — Generating... {pct}%")
+            progress_bar.progress(max(1, pct))
+
+        elif s == "done":
+            status_text.success("✅ Ludy 1.0 — Done!")
+            progress_bar.progress(100)
+            time.sleep(0.5)
+            status_text.empty()
+            progress_bar.empty()
             b64 = data["image"].split(",")[1]
             return base64.b64decode(b64)
-        elif data["status"] == "error":
+
+        elif s == "error":
+            status_text.empty()
+            progress_bar.empty()
             raise RuntimeError(data.get("error", "Unknown error"))
 
+    status_text.empty()
+    progress_bar.empty()
     raise RuntimeError("Generation timed out after 6 minutes")
 
 # ── Chat history display ─────────────────────────────────────────────
@@ -239,7 +264,7 @@ if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."
 
     with st.chat_message("assistant"):
         if is_image_request:
-            st.write("🌌 **Ludy 1.2** is generating your image...")
+            st.write("🌌 **Ludy 1.0** is working on your image...")
             try:
                 image_data = generate_image_with_ludy(user_input)
                 image      = Image.open(io.BytesIO(image_data))
@@ -299,6 +324,3 @@ if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."
     if image_was_uploaded:
         st.session_state.clear_image = True
         st.rerun()
-
-
-
