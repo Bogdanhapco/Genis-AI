@@ -36,7 +36,7 @@ st.caption("by BotDevelopmentAI")
 
 # ══════════════════════════════════════════════════════════════════
 #  Ollama settings — change model name here if needed
-OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_BASE_URL = "https://ruthenious-unconsiderablely-aryanna.ngrok-free.dev"
 OLLAMA_MODEL    = "genis"          # your renamed Ollama model
 MAX_CONCURRENT  = 3                # max simultaneous text generations (tune to your VRAM)
 
@@ -388,3 +388,4 @@ if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."
     if image_was_uploaded:
         st.session_state.clear_image = True
         st.rerun()
+
