@@ -153,7 +153,7 @@ if mode == "Flash":
     ludy_name             = "Ludy Flash"
 else:
     display_name          = "Genis Pro 3.0"
-    text_model_id         = "llama-3.3-70b-versatile"
+    text_model_id         = "openai/gpt-oss-120b"
     vision_model_id       = "meta-llama/llama-4-maverick-17b-128e-instruct"
     supports_vision       = True
     current_system_prompt = PRO_SYSTEM_PROMPT
@@ -316,6 +316,7 @@ if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."
     if image_was_uploaded:
         st.session_state.clear_image = True
         st.rerun()
+
 
 
 
