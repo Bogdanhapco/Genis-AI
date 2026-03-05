@@ -37,7 +37,7 @@ st.caption("by BotDevelopmentAI")
 # ══════════════════════════════════════════════════════════════════
 #  Ollama settings — change model name here if needed
 OLLAMA_BASE_URL = "https://ruthenious-unconsiderablely-aryanna.ngrok-free.dev/ollama"
-OLLAMA_MODEL    = "Genis:latest"          # your renamed Ollama model
+OLLAMA_MODEL    = "genis"          # your renamed Ollama model
 MAX_CONCURRENT  = 3                # max simultaneous text generations (tune to your VRAM)
 
 #  Image server — update when ngrok URL changes
@@ -127,7 +127,7 @@ def image_to_base64(image):
 
 def generate_image_with_ludy(prompt: str, ludy_url: str, ludy_name: str, mode: str):
     model_key = "flash" if mode == "Flash" else "pro"
-    res       = requests.post(f"{ludy_url}/generate", json={"prompt": prompt, "model": model_key}, timeout=10)
+    res       = requests.post(f"{ludy_url}/generate", json={"prompt": prompt, "model": model_key}, timeout=30)
     data      = res.json()
     job_id    = data["job_id"]
     queue_pos = data.get("queue_pos", 1)
@@ -135,10 +135,15 @@ def generate_image_with_ludy(prompt: str, ludy_url: str, ludy_name: str, mode: s
     status_text  = st.empty()
     progress_bar = st.empty()
 
-    for _ in range(120):
-        time.sleep(3)
-        data = requests.get(f"{ludy_url}/status/{job_id}", timeout=5).json()
-        s    = data.get("status", "queued")
+    for _ in range(240):   # 240 × 5s = 20 min max wait
+        time.sleep(5)
+        try:
+            data = requests.get(f"{ludy_url}/status/{job_id}", timeout=30).json()
+        except requests.exceptions.Timeout:
+            status_text.warning("⏳ Server is busy, still waiting...")
+            continue
+
+        s = data.get("status", "queued")
 
         if s == "queued":
             pos = data.get("queue_pos", queue_pos)
@@ -162,7 +167,7 @@ def generate_image_with_ludy(prompt: str, ludy_url: str, ludy_name: str, mode: s
 
     status_text.empty()
     progress_bar.empty()
-    raise RuntimeError("Generation timed out after 6 minutes")
+    raise RuntimeError("Generation timed out after 20 minutes")
 
 
 # ─────────────────────────────────────────────
@@ -201,7 +206,7 @@ If someone asks who Bogdan Hapco is, tell them he's your creator and the founder
 
 with st.sidebar:
     st.header("🌌 Genis Control")
-    st.info("Genis — created by BotDevelopmentAI cloud")
+    st.info("Genis — created by BotDevelopmentAI — powered by Ollama (local) & BotDevelopmentAI cloud")
 
     st.subheader("Power Mode")
     mode = st.radio(
@@ -388,11 +393,3 @@ if user_input := st.chat_input(f"Talk to {display_name} • ask Ludy to draw..."
     if image_was_uploaded:
         st.session_state.clear_image = True
         st.rerun()
-
-
-
-
-
-
-
-
