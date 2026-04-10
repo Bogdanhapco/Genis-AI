@@ -248,11 +248,11 @@ with st.sidebar:
         model_names = [m["name"] for m in r.get("models", [])]
         ollama_online = True
         if OLLAMA_MODEL in model_names or any(OLLAMA_MODEL in n for n in model_names):
-            st.success(f"🟢 Ollama online — `{OLLAMA_MODEL}` loaded")
+            st.success(f"🟢 Genis online — `{OLLAMA_MODEL}` loaded")
         else:
-            st.warning(f"⚠️ Ollama online but `{OLLAMA_MODEL}` not found\nAvailable: {', '.join(model_names)}")
+            st.warning(f"⚠️ Genis online but `{OLLAMA_MODEL}` not found\nAvailable: {', '.join(model_names)}")
     except:
-        st.error("🔴 Ollama offline — start Ollama first!")
+        st.error("🔴 Ollama offline")
 
     # Image server health check
     server_online = False
@@ -290,7 +290,7 @@ else:
     display_name          = "Genis Pro 3.0"
     supports_vision       = True   # Ollama vision depends on your model; set False if not supported
     current_system_prompt = PRO_SYSTEM_PROMPT
-    ludy_name             = "Ludy Pro"
+    ludy_name             = "Ludy-3o"
 
 # Keep system prompt up to date
 if not st.session_state.messages:
